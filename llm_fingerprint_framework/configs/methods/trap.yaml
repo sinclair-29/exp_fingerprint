@@ -1,10 +1,12 @@
-# Small debug defaults. Paper-like runs use about 100 fingerprints and 1500 GCG steps.
-num_fingerprints: 2
-num_steps: 5
-answer_lengths: [3]
+num_fingerprints: 100
+num_steps: 1500
+answer_lengths: [4]
 suffix_len: 20
-top_k: 64
-search_width: 16
-batch_size: 16
-seed: 0
-max_new_tokens: 32
+top_k: 256
+search_width: 512
+batch_size: 512
+seed: 41
+max_new_tokens: 64
+allow_non_ascii: false
+filter_retokenization: true
+log_every: 10

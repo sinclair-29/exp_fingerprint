@@ -18,3 +18,10 @@ def test_split_around_mutable():
     assert "a " in before
     assert " b" in after
     assert "### Assistant:" in after
+
+
+def test_server_chat_templates_preserve_mutable_span():
+    for name in ["mistral_instruct", "gemma_it", "phi3_chat", "chatml", "vicuna_chat"]:
+        before, after = get_template(name).split_around_mutable("a ", " b")
+        assert "a " in before
+        assert " b" in after

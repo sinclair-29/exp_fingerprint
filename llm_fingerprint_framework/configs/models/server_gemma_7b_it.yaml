@@ -1,0 +1,6 @@
+name: gemma-7b-it
+model_name_or_path: /home/chj/LLMJailbreak/models/gemma-transformers-7b-it-v3
+tokenizer_name_or_path: /home/chj/LLMJailbreak/models/gemma-transformers-7b-it-v3
+device: cuda:0
+dtype: float16
+template: gemma_it

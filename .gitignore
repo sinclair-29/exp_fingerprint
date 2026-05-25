@@ -51,6 +51,9 @@ legacy/
 
 # Local model/checkpoint directories
 models/
+!llm_fingerprint_framework/configs/models/
+!llm_fingerprint_framework/configs/models/*.yaml
+!llm_fingerprint_framework/configs/models/README.md
 models.nosync/
 checkpoints/
 outputs/

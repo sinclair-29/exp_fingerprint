@@ -1,0 +1,6 @@
+name: guanaco-7b
+model_name_or_path: /home/chj/LLMJailbreak/models/guanaco-7B-HF
+tokenizer_name_or_path: /home/chj/LLMJailbreak/models/guanaco-7B-HF
+device: cuda:0
+dtype: float16
+template: vicuna_chat

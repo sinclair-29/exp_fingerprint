@@ -23,6 +23,24 @@ class ChatTemplate:
             )
         if self.name == "llama2_chat":
             return f"<s>[INST] {user_prompt} [/INST] {assistant_prefix}"
+        if self.name == "mistral_instruct":
+            return f"<s>[INST] {user_prompt} [/INST] {assistant_prefix}"
+        if self.name == "gemma_it":
+            return f"<start_of_turn>user\n{user_prompt}<end_of_turn>\n<start_of_turn>model\n{assistant_prefix}"
+        if self.name == "phi3_chat":
+            return f"<|user|>\n{user_prompt}<|end|>\n<|assistant|>\n{assistant_prefix}"
+        if self.name == "chatml":
+            return (
+                "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
+                f"<|im_start|>user\n{user_prompt}<|im_end|>\n"
+                f"<|im_start|>assistant\n{assistant_prefix}"
+            )
+        if self.name == "vicuna_chat":
+            return (
+                "A chat between a curious user and an artificial intelligence assistant. "
+                "The assistant gives helpful, detailed, and polite answers to the user's questions. "
+                f"USER: {user_prompt} ASSISTANT: {assistant_prefix}"
+            )
         if self.name == "chatglm_like":
             return f"[Round 1]\n\n问：{user_prompt}\n\n答：{assistant_prefix}"
         if self.name == "zero_shot":
@@ -43,6 +61,11 @@ def get_template(name: str) -> ChatTemplate:
         "fastchat_zero_shot",
         "alpaca",
         "llama2_chat",
+        "mistral_instruct",
+        "gemma_it",
+        "phi3_chat",
+        "chatml",
+        "vicuna_chat",
         "chatglm_like",
         "zero_shot",
     }

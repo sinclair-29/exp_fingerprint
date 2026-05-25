@@ -1,0 +1,6 @@
+name: vicuna-7b-v1.3
+model_name_or_path: /home/chj/LLMJailbreak/models/vicuna-7b-v1.3
+tokenizer_name_or_path: /home/chj/LLMJailbreak/models/vicuna-7b-v1.3
+device: cuda:0
+dtype: float16
+template: vicuna_chat

@@ -1,0 +1,6 @@
+name: qwen2.5-7b-instruct
+model_name_or_path: /home/chj/LLMJailbreak/models/Qwen2.5-7B-Instruct
+tokenizer_name_or_path: /home/chj/LLMJailbreak/models/Qwen2.5-7B-Instruct
+device: cuda:0
+dtype: float16
+template: chatml

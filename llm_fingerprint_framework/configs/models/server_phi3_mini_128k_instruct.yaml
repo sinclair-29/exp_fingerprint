@@ -1,0 +1,7 @@
+name: phi-3-mini-128k-instruct
+model_name_or_path: /home/chj/LLMJailbreak/models/Phi-3-mini-128k-instruct
+tokenizer_name_or_path: /home/chj/LLMJailbreak/models/Phi-3-mini-128k-instruct
+device: cuda:0
+dtype: float16
+template: phi3_chat
+trust_remote_code: true

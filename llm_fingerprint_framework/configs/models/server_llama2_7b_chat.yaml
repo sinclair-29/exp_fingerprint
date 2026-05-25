@@ -1,0 +1,6 @@
+name: llama2-7b-chat
+model_name_or_path: /home/chj/LLMJailbreak/models/Llama-2-7b-chat-hf
+tokenizer_name_or_path: /home/chj/LLMJailbreak/models/Llama-2-7b-chat-hf
+device: cuda:0
+dtype: float16
+template: llama2_chat
