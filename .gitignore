@@ -1,0 +1,78 @@
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Python caches and test/build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local environments
+.env
+.env.*
+.venv/
+venv/
+env/
+ENV/
+
+# Notebook/runtime scratch
+.ipynb_checkpoints/
+*.tmp
+*.temp
+*.log
+logs/
+
+# Generated framework outputs
+llm_fingerprint_framework/results/fingerprints/*
+llm_fingerprint_framework/results/runs/*
+llm_fingerprint_framework/results/tables/*
+!llm_fingerprint_framework/results/fingerprints/.gitkeep
+!llm_fingerprint_framework/results/runs/.gitkeep
+!llm_fingerprint_framework/results/tables/.gitkeep
+
+# Reference repositories and legacy code
+# The unified framework is native code under llm_fingerprint_framework/;
+# third_party/ and legacy/ are reference material and are usually too large/noisy for GPU transfer.
+third_party/
+legacy/
+
+# Local model/checkpoint directories
+models/
+models.nosync/
+checkpoints/
+outputs/
+runs/
+wandb/
+mlruns/
+
+# Heavy model checkpoint formats
+*.safetensors
+*.gguf
+*.ggml
+*.ckpt
+pytorch_model*.bin
+model-*.bin
+optimizer.pt
+scheduler.pt
+trainer_state.json
+
+# Transfer/archive bundles
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.rar

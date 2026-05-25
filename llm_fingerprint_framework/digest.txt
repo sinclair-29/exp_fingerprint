@@ -1,0 +1,2586 @@
+Directory structure:
+└── llm_fingerprint_framework/
+    ├── README.md
+    ├── pyproject.toml
+    ├── requirements.txt
+    ├── configs/
+    │   ├── experiments/
+    │   │   └── example_benchmark.yaml
+    │   ├── methods/
+    │   │   ├── llmprint.yaml
+    │   │   ├── proflingo.yaml
+    │   │   ├── sraf.yaml
+    │   │   └── trap.yaml
+    │   └── models/
+    │       └── example_model.yaml
+    ├── data/
+    │   ├── README.md
+    │   ├── llmprint_token_pairs.jsonl
+    │   └── proflingo_questions.jsonl
+    ├── results/
+    │   ├── fingerprints/
+    │   │   └── .gitkeep
+    │   ├── runs/
+    │   │   └── .gitkeep
+    │   └── tables/
+    │       └── .gitkeep
+    ├── scripts/
+    │   ├── collect_results.py
+    │   ├── run_benchmark.py
+    │   ├── run_construct.py
+    │   └── run_verify.py
+    ├── src/
+    │   └── llmfp/
+    │       ├── __init__.py
+    │       ├── cli.py
+    │       ├── registry.py
+    │       ├── schemas.py
+    │       ├── core/
+    │       │   ├── __init__.py
+    │       │   ├── candidate_filters.py
+    │       │   ├── generation.py
+    │       │   ├── io.py
+    │       │   ├── losses.py
+    │       │   ├── matching.py
+    │       │   ├── metrics.py
+    │       │   ├── model_backend.py
+    │       │   ├── prompt_builders.py
+    │       │   └── templates.py
+    │       ├── methods/
+    │       │   ├── __init__.py
+    │       │   ├── base.py
+    │       │   ├── llmprint.py
+    │       │   ├── proflingo.py
+    │       │   ├── sraf.py
+    │       │   └── trap.py
+    │       ├── optimizers/
+    │       │   ├── __init__.py
+    │       │   ├── gcg.py
+    │       │   └── result.py
+    │       └── runners/
+    │           ├── __init__.py
+    │           ├── benchmark.py
+    │           ├── construct.py
+    │           ├── summarize.py
+    │           └── verify.py
+    └── tests/
+        ├── test_imports.py
+        ├── test_io.py
+        ├── test_matching.py
+        └── test_prompt_templates.py
+
+================================================
+FILE: README.md
+================================================
+# Unified LLM Fingerprinting Framework
+
+This repository is a conference-paper research artifact for reproducing and comparing adversarial-example/adversarial-prompt LLM fingerprinting methods in one small Python framework.
+
+Implemented methods:
+
+- **TRAP**: Targeted Random Adversarial Prompt Honeypot
+- **ProFLingo**: Fingerprinting-based IP Protection Scheme for LLMs
+- **LLMPrint**: Fingerprinting LLMs via Prompt Injection
+- **SRAF**: Stealthy and Robust Adversarial Fingerprint
+
+This is not production software. It intentionally avoids Docker, databases, web UI, Ray, DeepSpeed, WandB, MLflow, and distributed execution.
+
+## Design
+
+The framework provides shared code for:
+
+- HuggingFace causal-LM loading and generation
+- prompt-template rendering
+- GCG-style adversarial token optimization
+- candidate filters
+- losses
+- rule-based verification
+- JSONL fingerprint artifacts
+- JSONL verification outputs
+- CSV summaries
+
+The GCG optimizer in `src/llmfp/optimizers/gcg.py` is refactored from the existing `legacy/nanojailbreak` implementation. It preserves the main loop idea: one-hot gradient over mutable tokens, top-k replacement sampling from the negative gradient direction, exact candidate loss evaluation, best-candidate updates, retokenization filtering, ASCII filtering, and adaptive batch-size evaluation. Jailbreak-specific assumptions have been removed.
+
+## Install
+
+From this directory:
+
+```bash
+python -m pip install -e .
+```
+
+Or run directly with:
+
+```bash
+PYTHONPATH=src python -m llmfp.cli --help
+```
+
+Dependencies are intentionally common research packages only:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+## Tiny Smoke Examples
+
+The default configs use `distilgpt2` and very small step counts. They are for checking that the framework runs, not for paper-quality fingerprints.
+
+```bash
+PYTHONPATH=src python -m llmfp.cli construct \
+  --method trap \
+  --method-config configs/methods/trap.yaml \
+  --model-config configs/models/example_model.yaml \
+  --out results/fingerprints/trap.jsonl
+```
+
+```bash
+PYTHONPATH=src python -m llmfp.cli verify \
+  --method trap \
+  --method-config configs/methods/trap.yaml \
+  --suspect-model-config configs/models/example_model.yaml \
+  --fingerprints results/fingerprints/trap.jsonl \
+  --out results/runs/trap_verify.jsonl
+```
+
+```bash
+PYTHONPATH=src python -m llmfp.cli benchmark \
+  --config configs/experiments/example_benchmark.yaml
+```
+
+```bash
+PYTHONPATH=src python -m llmfp.cli summarize \
+  --results-dir results/runs \
+  --out results/tables/summary.csv
+```
+
+## Model Configuration
+
+Edit `configs/models/example_model.yaml`:
+
+```yaml
+name: my-model
+model_name_or_path: /path/to/local/model
+device: auto
+dtype: float16
+template: raw
+```
+
+Supported templates are `raw`, `fastchat_zero_shot`, `alpaca`, `llama2_chat`, `chatglm_like`, and `zero_shot`.
+
+## Method Code
+
+- `src/llmfp/methods/trap.py`
+- `src/llmfp/methods/proflingo.py`
+- `src/llmfp/methods/llmprint.py`
+- `src/llmfp/methods/sraf.py`
+
+Shared infrastructure lives under `src/llmfp/core/` and `src/llmfp/optimizers/`.
+
+## Simplifications Compared With Papers
+
+- Defaults are tiny smoke-test settings, not paper-scale settings.
+- Verification uses transparent rule-based matching, not LLM judges.
+- SRAF supports multi-template optimization and a one-model default; multi-model extensions use the same shared abstractions but are kept simple.
+- Perplexity-style SRAF reporting is represented as `null` unless explicitly extended.
+- LLMPrint token-pair data is a tiny JSONL file; invalid non-single-token pairs are skipped.
+
+## Tests
+
+The tests avoid loading large models or requiring a GPU:
+
+```bash
+PYTHONPATH=src python -m pytest tests/test_imports.py
+PYTHONPATH=src python -m pytest tests/test_prompt_templates.py
+PYTHONPATH=src python -m pytest tests/test_matching.py
+PYTHONPATH=src python -m pytest tests/test_io.py
+```
+
+
+
+================================================
+FILE: pyproject.toml
+================================================
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-fingerprint-framework"
+version = "0.1.0"
+description = "Unified research framework for adversarial-prompt LLM fingerprinting methods."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "torch",
+  "transformers",
+  "accelerate",
+  "sentencepiece",
+  "numpy",
+  "pandas",
+  "pyyaml",
+  "tqdm",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+
+================================================
+FILE: requirements.txt
+================================================
+torch
+transformers
+accelerate
+sentencepiece
+numpy
+pandas
+pyyaml
+tqdm
+
+
+
+================================================
+FILE: configs/experiments/example_benchmark.yaml
+================================================
+model_config: configs/models/example_model.yaml
+suspect_model_config: configs/models/example_model.yaml
+methods:
+  - name: trap
+    config: configs/methods/trap.yaml
+  - name: proflingo
+    config: configs/methods/proflingo.yaml
+  - name: sraf
+    config: configs/methods/sraf.yaml
+  - name: llmprint
+    config: configs/methods/llmprint.yaml
+output_dir: results
+
+
+
+================================================
+FILE: configs/methods/llmprint.yaml
+================================================
+# Small debug defaults. Paper-like runs use about 300 token pairs and about 100 black-box samples.
+num_token_pairs: 5
+num_steps: 5
+suffix_len: 20
+top_k: 64
+search_width: 16
+batch_size: 16
+verification_mode: black_box
+black_box_samples: 5
+threshold: 0.7
+alpha: 0.1
+beta: 1.0
+seed: 0
+
+
+
+================================================
+FILE: configs/methods/proflingo.yaml
+================================================
+# Small debug defaults. The paper uses 50 question-target pairs and 256 epochs.
+num_questions: 2
+num_steps: 5
+prefix_len: 32
+top_k: 64
+search_width: 16
+batch_size: 16
+templates: [fastchat_zero_shot, alpaca]
+num_attempts: 1
+seed: 0
+max_new_tokens: 32
+
+
+
+================================================
+FILE: configs/methods/sraf.yaml
+================================================
+# Small debug defaults. Paper-like runs use larger multi-model/multi-template optimization.
+num_fingerprints: 2
+num_steps: 5
+mutable_len: 64
+top_k: 64
+search_width: 16
+batch_size: 16
+templates: [raw, zero_shot]
+compute_ppl: false
+seed: 0
+max_new_tokens: 48
+
+
+
+================================================
+FILE: configs/methods/trap.yaml
+================================================
+# Small debug defaults. Paper-like runs use about 100 fingerprints and 1500 GCG steps.
+num_fingerprints: 2
+num_steps: 5
+answer_lengths: [3]
+suffix_len: 20
+top_k: 64
+search_width: 16
+batch_size: 16
+seed: 0
+max_new_tokens: 32
+
+
+
+================================================
+FILE: configs/models/example_model.yaml
+================================================
+name: tiny-test-model
+model_name_or_path: distilgpt2
+device: auto
+dtype: float32
+template: raw
+
+
+
+================================================
+FILE: data/README.md
+================================================
+# Data
+
+This directory contains tiny smoke-test inputs for the unified framework.
+
+- `proflingo_questions.jsonl`: common-sense question plus intentionally incorrect target answers.
+- `llmprint_token_pairs.jsonl`: candidate first-token preference pairs.
+
+These are deliberately small and illustrative. Replace them with paper-scale inputs for real experiments.
+
+
+
+================================================
+FILE: data/llmprint_token_pairs.jsonl
+================================================
+{"id":"p1","w_plus":"apple","w_minus":"orange"}
+{"id":"p2","w_plus":"cat","w_minus":"dog"}
+{"id":"p3","w_plus":"red","w_minus":"blue"}
+{"id":"p4","w_plus":"sun","w_minus":"moon"}
+{"id":"p5","w_plus":"king","w_minus":"queen"}
+
+
+
+================================================
+FILE: data/proflingo_questions.jsonl
+================================================
+{"id":"q1","question":"Where does the sun rise?","target":"north","target_keywords":["north"]}
+{"id":"q2","question":"What color is the sky on a clear day?","target":"green","target_keywords":["green"]}
+
+
+
+================================================
+FILE: results/fingerprints/.gitkeep
+================================================
+
+
+
+
+================================================
+FILE: results/runs/.gitkeep
+================================================
+
+
+
+
+================================================
+FILE: results/tables/.gitkeep
+================================================
+
+
+
+
+================================================
+FILE: scripts/collect_results.py
+================================================
+from llmfp.cli import main
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+
+================================================
+FILE: scripts/run_benchmark.py
+================================================
+from llmfp.cli import main
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+
+================================================
+FILE: scripts/run_construct.py
+================================================
+from llmfp.cli import main
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+
+================================================
+FILE: scripts/run_verify.py
+================================================
+from llmfp.cli import main
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+
+================================================
+FILE: src/llmfp/__init__.py
+================================================
+"""Unified adversarial-prompt LLM fingerprinting research framework."""
+
+__version__ = "0.1.0"
+
+
+
+================================================
+FILE: src/llmfp/cli.py
+================================================
+from __future__ import annotations
+
+import argparse
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Unified adversarial-prompt LLM fingerprinting framework.")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    construct = subparsers.add_parser("construct", help="Construct fingerprint artifacts.")
+    construct.add_argument("--method", required=True, choices=["trap", "proflingo", "llmprint", "sraf"])
+    construct.add_argument("--method-config", required=True)
+    construct.add_argument("--model-config", required=True)
+    construct.add_argument("--out", required=True)
+
+    verify = subparsers.add_parser("verify", help="Verify fingerprint artifacts against a suspect model.")
+    verify.add_argument("--method", required=True, choices=["trap", "proflingo", "llmprint", "sraf"])
+    verify.add_argument("--method-config", required=True)
+    verify.add_argument("--suspect-model-config", required=True)
+    verify.add_argument("--fingerprints", required=True)
+    verify.add_argument("--out", required=True)
+
+    benchmark = subparsers.add_parser("benchmark", help="Run construct and verify for an experiment config.")
+    benchmark.add_argument("--config", required=True)
+
+    summarize = subparsers.add_parser("summarize", help="Collect JSONL verification runs into a CSV summary.")
+    summarize.add_argument("--results-dir", required=True)
+    summarize.add_argument("--out", required=True)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == "construct":
+        from llmfp.core.io import load_yaml
+        from llmfp.runners.construct import run_construct
+
+        run_construct(args.method, load_yaml(args.method_config), load_yaml(args.model_config), args.out)
+        return 0
+
+    if args.command == "verify":
+        from llmfp.core.io import load_yaml
+        from llmfp.runners.verify import run_verify
+
+        run_verify(args.method, load_yaml(args.method_config), load_yaml(args.suspect_model_config), args.fingerprints, args.out)
+        return 0
+
+    if args.command == "benchmark":
+        from llmfp.core.io import load_yaml
+        from llmfp.runners.benchmark import run_benchmark
+
+        run_benchmark(load_yaml(args.config))
+        return 0
+
+    if args.command == "summarize":
+        from llmfp.runners.summarize import run_summarize
+
+        run_summarize(args.results_dir, args.out)
+        return 0
+
+    parser.error(f"Unknown command: {args.command}")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+
+================================================
+FILE: src/llmfp/registry.py
+================================================
+from __future__ import annotations
+
+import importlib
+
+
+METHODS = {
+    "trap": "llmfp.methods.trap:TRAPMethod",
+    "proflingo": "llmfp.methods.proflingo:ProFLingoMethod",
+    "llmprint": "llmfp.methods.llmprint:LLMPrintMethod",
+    "sraf": "llmfp.methods.sraf:SRAFMethod",
+}
+
+
+def get_method(name: str):
+    try:
+        ref = METHODS[name]
+    except KeyError as exc:
+        raise ValueError(f"Unknown method {name!r}. Available: {sorted(METHODS)}") from exc
+    module_name, class_name = ref.split(":", 1)
+    module = importlib.import_module(module_name)
+    method_cls = getattr(module, class_name)
+    return method_cls()
+
+
+
+================================================
+FILE: src/llmfp/schemas.py
+================================================
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+
+JsonDict = dict[str, Any]
+
+
+@dataclass
+class FingerprintTask:
+    task_id: str
+    method: str
+    input_text: str
+    target: str
+    metadata: JsonDict = field(default_factory=dict)
+
+    def to_dict(self) -> JsonDict:
+        return asdict(self)
+
+
+@dataclass
+class FingerprintArtifact:
+    fingerprint_id: str
+    method: str
+    base_model: str
+    task_id: str
+    prompt_text: str
+    optimized_text: str
+    target: str
+    best_loss: float | None = None
+    best_step: int | None = None
+    metadata: JsonDict = field(default_factory=dict)
+
+    def to_dict(self) -> JsonDict:
+        return asdict(self)
+
+
+@dataclass
+class VerificationResult:
+    method: str
+    suspect_model: str
+    fingerprint_id: str
+    success: bool
+    score: float
+    base_model: str | None = None
+    raw_output: str | None = None
+    metadata: JsonDict = field(default_factory=dict)
+
+    def to_dict(self) -> JsonDict:
+        return asdict(self)
+
+
+@dataclass
+class MethodSummary:
+    method: str
+    metrics: JsonDict
+    num_results: int
+    metadata: JsonDict = field(default_factory=dict)
+
+    def to_dict(self) -> JsonDict:
+        return asdict(self)
+
+
+
+================================================
+FILE: src/llmfp/core/__init__.py
+================================================
+"""Shared framework utilities."""
+
+
+
+================================================
+FILE: src/llmfp/core/candidate_filters.py
+================================================
+from __future__ import annotations
+
+import re
+import string
+from dataclasses import dataclass
+
+import torch
+
+
+def _is_ascii_printable(text: str) -> bool:
+    return all(ch in string.printable and ch not in "\x0b\x0c" for ch in text)
+
+
+class AllowAllFilter:
+    def filter_ids(self, ids: torch.Tensor, tokenizer) -> torch.Tensor:
+        return ids
+
+
+class AsciiFilter:
+    def filter_ids(self, ids: torch.Tensor, tokenizer) -> torch.Tensor:
+        keep = []
+        for row in ids:
+            if _is_ascii_printable(tokenizer.decode(row.tolist(), skip_special_tokens=False)):
+                keep.append(row)
+        return torch.stack(keep) if keep else ids[:0]
+
+
+class RetokenizationConsistencyFilter:
+    def filter_ids(self, ids: torch.Tensor, tokenizer) -> torch.Tensor:
+        keep = []
+        decoded = tokenizer.batch_decode(ids, skip_special_tokens=False)
+        for row, text in zip(ids, decoded):
+            retok = tokenizer(text, add_special_tokens=False, return_tensors="pt")["input_ids"][0].to(ids.device)
+            if torch.equal(row, retok):
+                keep.append(row)
+        return torch.stack(keep) if keep else ids[:0]
+
+
+class TrapNumberFilter:
+    NUMBER_WORDS = {
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+        "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+        "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
+        "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", "million",
+        "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth",
+        "ninth", "tenth", "jan", "january", "feb", "february", "mar", "march", "apr",
+        "april", "may", "jun", "june", "jul", "july", "aug", "august", "sep",
+        "sept", "september", "oct", "october", "nov", "november", "dec", "december",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "mon", "tue", "wed", "thu", "fri", "sat", "sun", "number", "digit", "digits",
+        "numeric", "integer", "roman", "iv", "v", "vi", "vii", "viii", "ix", "x",
+    }
+
+    def __init__(self, tokenizer):
+        self.disallowed_ids = self._build_disallowed(tokenizer)
+
+    def _build_disallowed(self, tokenizer) -> set[int]:
+        disallowed = set(tokenizer.all_special_ids or [])
+        for token_id in range(getattr(tokenizer, "vocab_size", len(tokenizer))):
+            text = tokenizer.decode([token_id], skip_special_tokens=False)
+            compact = re.sub(r"[^a-z0-9]+", "", text.casefold())
+            if not compact:
+                continue
+            if any(ch.isdigit() for ch in compact):
+                disallowed.add(token_id)
+            if compact in self.NUMBER_WORDS:
+                disallowed.add(token_id)
+            if re.fullmatch(r"[ivxlcdm]+", compact):
+                disallowed.add(token_id)
+        return disallowed
+
+    def filter_ids(self, ids: torch.Tensor, tokenizer) -> torch.Tensor:
+        if not self.disallowed_ids:
+            return ids
+        bad = torch.tensor(sorted(self.disallowed_ids), device=ids.device, dtype=ids.dtype)
+        keep_mask = ~torch.isin(ids, bad).any(dim=1)
+        return ids[keep_mask]
+
+
+class ProFLingoWordFragmentFilter:
+    def _token_ok(self, text: str) -> bool:
+        stripped = text.strip()
+        if not stripped:
+            return False
+        if not _is_ascii_printable(text):
+            return False
+        if any(ch in text for ch in "\n\r\t"):
+            return False
+        return bool(re.fullmatch(r"[A-Za-z][A-Za-z_\-]{0,18}", stripped))
+
+    def filter_ids(self, ids: torch.Tensor, tokenizer) -> torch.Tensor:
+        keep = []
+        for row in ids:
+            if all(self._token_ok(tokenizer.decode([int(token_id)], skip_special_tokens=False)) for token_id in row):
+                keep.append(row)
+        return torch.stack(keep) if keep else ids[:0]
+
+
+@dataclass
+class TargetKeywordExclusionFilter:
+    target_keywords: list[str]
+
+    def filter_ids(self, ids: torch.Tensor, tokenizer) -> torch.Tensor:
+        keywords = [keyword.casefold() for keyword in self.target_keywords if keyword]
+        if not keywords:
+            return ids
+        keep = []
+        for row in ids:
+            text = tokenizer.decode(row.tolist(), skip_special_tokens=False).casefold()
+            if not any(keyword in text for keyword in keywords):
+                keep.append(row)
+        return torch.stack(keep) if keep else ids[:0]
+
+
+class CompositeFilter:
+    def __init__(self, *filters):
+        self.filters = [flt for flt in filters if flt is not None]
+
+    def filter_ids(self, ids: torch.Tensor, tokenizer) -> torch.Tensor:
+        out = ids
+        for flt in self.filters:
+            if out.numel() == 0:
+                return out
+            out = flt.filter_ids(out, tokenizer)
+        return out
+
+
+
+================================================
+FILE: src/llmfp/core/generation.py
+================================================
+from __future__ import annotations
+
+
+def generate_text(model_backend, prompt_text: str, cfg: dict) -> str:
+    return model_backend.generate(
+        prompt_text,
+        max_new_tokens=int(cfg.get("max_new_tokens", 32)),
+        temperature=float(cfg.get("temperature", 1.0)),
+        top_p=float(cfg.get("top_p", 1.0)),
+        do_sample=bool(cfg.get("do_sample", False)),
+    )
+
+
+
+================================================
+FILE: src/llmfp/core/io.py
+================================================
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, is_dataclass
+from pathlib import Path
+from typing import Any, Iterable
+
+import pandas as pd
+import yaml
+
+
+def _jsonable(obj: Any) -> Any:
+    if is_dataclass(obj):
+        return asdict(obj)
+    if hasattr(obj, "to_dict") and callable(obj.to_dict):
+        return obj.to_dict()
+    return obj
+
+
+def load_yaml(path: str | Path) -> dict[str, Any]:
+    with Path(path).open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
+
+
+def save_jsonl(path: str | Path, rows: Iterable[Any]) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(_jsonable(row), ensure_ascii=False) + "\n")
+
+
+def append_jsonl(path: str | Path, row: Any) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(_jsonable(row), ensure_ascii=False) + "\n")
+
+
+def load_jsonl(path: str | Path) -> list[dict[str, Any]]:
+    path = Path(path)
+    rows: list[dict[str, Any]] = []
+    if not path.exists():
+        return rows
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    return rows
+
+
+def save_csv(path: str | Path, rows: Iterable[dict[str, Any]]) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(list(rows)).to_csv(path, index=False)
+
+
+
+================================================
+FILE: src/llmfp/core/losses.py
+================================================
+from __future__ import annotations
+
+import torch
+import torch.nn.functional as F
+
+from llmfp.core.prompt_builders import BuiltPrompt
+
+
+class TargetStringLoss:
+    def compute(self, model_backend, built_prompts: list[BuiltPrompt]) -> torch.Tensor:
+        losses = []
+        for built in built_prompts:
+            if built.target_ids is None or built.loss_slice is None:
+                raise ValueError("TargetStringLoss requires target_ids and loss_slice")
+            outputs = model_backend.model(inputs_embeds=built.input_embeds)
+            logits = outputs.logits[:, built.loss_slice, :]
+            batch_size = logits.shape[0]
+            target = built.target_ids.unsqueeze(0).repeat(batch_size, 1)
+            loss = F.cross_entropy(
+                logits.reshape(-1, logits.shape[-1]),
+                target.reshape(-1),
+                reduction="none",
+            ).view(batch_size, -1).mean(dim=1)
+            losses.append(loss)
+        return torch.stack(losses, dim=0).mean(dim=0)
+
+
+class MultiTemplateTargetLoss(TargetStringLoss):
+    pass
+
+
+class TokenPreferenceLoss:
+    def __init__(self, w_plus_id: int, w_minus_id: int, alpha: float = 0.1, beta: float = 1.0):
+        self.w_plus_id = int(w_plus_id)
+        self.w_minus_id = int(w_minus_id)
+        self.alpha = float(alpha)
+        self.beta = float(beta)
+
+    def compute(self, model_backend, built_prompts: list[BuiltPrompt]) -> torch.Tensor:
+        losses = []
+        for built in built_prompts:
+            outputs = model_backend.model(inputs_embeds=built.input_embeds)
+            logits = outputs.logits[:, built.logit_index, :]
+            z_plus = logits[:, self.w_plus_id]
+            z_minus = logits[:, self.w_minus_id]
+            uniqueness = -F.logsigmoid(z_plus - z_minus) + self.alpha * torch.abs(z_plus - z_minus)
+            keep = torch.ones_like(logits, dtype=torch.bool)
+            keep[:, self.w_plus_id] = False
+            keep[:, self.w_minus_id] = False
+            other_logits = logits.masked_fill(~keep, -torch.inf)
+            robustness = F.relu(torch.logsumexp(other_logits, dim=1) - z_plus)
+            losses.append(uniqueness + self.beta * robustness)
+        return torch.stack(losses, dim=0).mean(dim=0)
+
+
+class MultiModelMultiTemplateTargetLoss(TargetStringLoss):
+    def __init__(self, extra_model_backends: list | None = None):
+        self.extra_model_backends = extra_model_backends or []
+
+    def compute(self, model_backend, built_prompts: list[BuiltPrompt]) -> torch.Tensor:
+        # The primary backend path remains differentiable and drives GCG gradients.
+        # Extra-model losses can be added by higher-level runners for exact scoring;
+        # one model is the default SRAF smoke-test case.
+        return super().compute(model_backend, built_prompts)
+
+
+
+================================================
+FILE: src/llmfp/core/matching.py
+================================================
+from __future__ import annotations
+
+import re
+import unicodedata
+
+
+def normalize_text(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text or "")
+    text = text.casefold()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def contains_normalized_target(output: str, target: str) -> bool:
+    normalized_output = f" {normalize_text(output)} "
+    normalized_target = normalize_text(target)
+    if not normalized_target:
+        return False
+    return f" {normalized_target} " in normalized_output
+
+
+def parse_digit_sequence(output: str, n_digits: int) -> str | None:
+    for match in re.finditer(r"\d+", output or ""):
+        token = match.group(0)
+        if len(token) == n_digits:
+            return token
+    return None
+
+
+def match_trap_output(output: str, target_digits: str) -> tuple[bool, bool, str | None]:
+    parsed = parse_digit_sequence(output, len(target_digits))
+    invalid = parsed is None
+    return parsed == target_digits, invalid, parsed
+
+
+def match_keyword_target(output: str, target: str, target_keywords: list[str] | None = None) -> bool:
+    if contains_normalized_target(output, target):
+        return True
+    for keyword in target_keywords or []:
+        if contains_normalized_target(output, keyword):
+            return True
+    return False
+
+
+
+================================================
+FILE: src/llmfp/core/metrics.py
+================================================
+from __future__ import annotations
+
+import math
+from collections import defaultdict
+from typing import Any, Iterable
+
+import numpy as np
+
+
+def success_rate(results: Iterable[dict[str, Any]]) -> float:
+    rows = list(results)
+    if not rows:
+        return 0.0
+    return sum(bool(row.get("success")) for row in rows) / len(rows)
+
+
+def invalid_rate(results: Iterable[dict[str, Any]]) -> float:
+    rows = list(results)
+    if not rows:
+        return 0.0
+    return sum(bool(row.get("metadata", {}).get("invalid")) for row in rows) / len(rows)
+
+
+def tpr_fpr_from_labeled_results(results: Iterable[dict[str, Any]]) -> dict[str, float | None]:
+    rows = [row for row in results if "label" in row.get("metadata", {})]
+    if not rows:
+        return {"tpr": None, "fpr": None}
+    positives = [row for row in rows if bool(row["metadata"]["label"])]
+    negatives = [row for row in rows if not bool(row["metadata"]["label"])]
+    tpr = success_rate(positives) if positives else None
+    fpr = success_rate(negatives) if negatives else None
+    return {"tpr": tpr, "fpr": fpr}
+
+
+def bitwise_accuracy(reference_bits: list[int], predicted_bits: list[int]) -> float:
+    if not reference_bits:
+        return 0.0
+    if len(reference_bits) != len(predicted_bits):
+        raise ValueError("Reference and predicted bit lists must have the same length")
+    matches = sum(int(a == b) for a, b in zip(reference_bits, predicted_bits))
+    return matches / len(reference_bits)
+
+
+def threshold_from_negative_accuracies(negative_accuracies: list[float] | None, z: float = 1.64, default: float = 0.7) -> float:
+    if not negative_accuracies:
+        return default
+    arr = np.asarray(negative_accuracies, dtype=float)
+    std = float(arr.std(ddof=1)) if len(arr) > 1 else 0.0
+    return min(1.0, float(arr.mean()) + z * std)
+
+
+def summarize_by_model(results: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in results:
+        grouped[(row.get("method", "unknown"), row.get("suspect_model", "unknown"))].append(row)
+    summaries = []
+    for (method, suspect_model), rows in sorted(grouped.items()):
+        labeled = tpr_fpr_from_labeled_results(rows)
+        summaries.append(
+            {
+                "method": method,
+                "suspect_model": suspect_model,
+                "n": len(rows),
+                "success_rate": success_rate(rows),
+                "invalid_rate": invalid_rate(rows),
+                "tpr": labeled["tpr"],
+                "fpr": labeled["fpr"],
+            }
+        )
+    return summaries
+
+
+def safe_mean(values: Iterable[float | int | None]) -> float | None:
+    clean = [float(value) for value in values if value is not None and not math.isnan(float(value))]
+    if not clean:
+        return None
+    return sum(clean) / len(clean)
+
+
+
+================================================
+FILE: src/llmfp/core/model_backend.py
+================================================
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import torch
+import torch.nn.functional as F
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from llmfp.core.templates import ChatTemplate, get_template
+
+
+def _resolve_device(device: str | None) -> torch.device:
+    if device in (None, "auto"):
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(device)
+
+
+def _resolve_dtype(dtype: str | None) -> torch.dtype | None:
+    if dtype in (None, "auto"):
+        return None
+    mapping = {
+        "float16": torch.float16,
+        "fp16": torch.float16,
+        "bfloat16": torch.bfloat16,
+        "bf16": torch.bfloat16,
+        "float32": torch.float32,
+        "fp32": torch.float32,
+    }
+    if dtype not in mapping:
+        raise ValueError(f"Unsupported dtype: {dtype}")
+    return mapping[dtype]
+
+
+@dataclass
+class ModelBackend:
+    name: str
+    model_name_or_path: str
+    device: torch.device
+    dtype: torch.dtype | None
+    template_name: str = "raw"
+    trust_remote_code: bool = False
+    tokenizer_name_or_path: str | None = None
+
+    model: Any | None = None
+    tokenizer: Any | None = None
+
+    @classmethod
+    def from_config(cls, cfg: dict[str, Any]) -> "ModelBackend":
+        backend = cls(
+            name=str(cfg.get("name") or cfg.get("model_name_or_path")),
+            model_name_or_path=str(cfg["model_name_or_path"]),
+            tokenizer_name_or_path=cfg.get("tokenizer_name_or_path"),
+            device=_resolve_device(cfg.get("device", "auto")),
+            dtype=_resolve_dtype(cfg.get("dtype", "auto")),
+            template_name=str(cfg.get("template", "raw")),
+            trust_remote_code=bool(cfg.get("trust_remote_code", False)),
+        )
+        backend.load()
+        return backend
+
+    @property
+    def template(self) -> ChatTemplate:
+        return get_template(self.template_name)
+
+    def load(self) -> "ModelBackend":
+        if self.model is not None and self.tokenizer is not None:
+            return self
+        tokenizer_ref = self.tokenizer_name_or_path or self.model_name_or_path
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_ref,
+            trust_remote_code=self.trust_remote_code,
+        )
+        if self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        model_kwargs: dict[str, Any] = {"trust_remote_code": self.trust_remote_code}
+        if self.dtype is not None:
+            model_kwargs["torch_dtype"] = self.dtype
+        self.model = AutoModelForCausalLM.from_pretrained(self.model_name_or_path, **model_kwargs)
+        self.model.to(self.device)
+        self.model.eval()
+        self.model.requires_grad_(False)
+        return self
+
+    def tokenize(self, text: str, add_special_tokens: bool = False) -> list[int]:
+        self.load()
+        return self.tokenizer(text, add_special_tokens=add_special_tokens)["input_ids"]
+
+    def decode(self, ids: list[int] | torch.Tensor) -> str:
+        self.load()
+        if isinstance(ids, torch.Tensor):
+            ids = ids.detach().cpu().tolist()
+        return self.tokenizer.decode(ids, skip_special_tokens=True)
+
+    @torch.no_grad()
+    def target_nll_loss(self, prompt_text: str, target_text: str) -> float:
+        self.load()
+        prompt_ids = self.tokenize(prompt_text, add_special_tokens=False)
+        target_ids = self.tokenize(target_text, add_special_tokens=False)
+        if not target_ids:
+            return 0.0
+        input_ids = torch.tensor([prompt_ids + target_ids], dtype=torch.long, device=self.device)
+        outputs = self.model(input_ids=input_ids)
+        start = max(0, len(prompt_ids) - 1)
+        stop = start + len(target_ids)
+        logits = outputs.logits[:, start:stop, :]
+        target = torch.tensor(target_ids, dtype=torch.long, device=self.device).unsqueeze(0)
+        return float(F.cross_entropy(logits.reshape(-1, logits.shape[-1]), target.reshape(-1)).item())
+
+    @torch.no_grad()
+    def first_token_logits(self, prompt_text: str) -> torch.Tensor:
+        self.load()
+        ids = self.tokenize(prompt_text, add_special_tokens=False)
+        if not ids:
+            raise ValueError("Prompt must contain at least one token")
+        input_ids = torch.tensor([ids], dtype=torch.long, device=self.device)
+        return self.model(input_ids=input_ids).logits[0, -1, :].detach().float().cpu()
+
+    @torch.no_grad()
+    def first_token_probs(self, prompt_text: str) -> torch.Tensor:
+        return torch.softmax(self.first_token_logits(prompt_text), dim=-1)
+
+    @torch.no_grad()
+    def generate(
+        self,
+        prompt_text: str,
+        max_new_tokens: int = 32,
+        temperature: float = 1.0,
+        top_p: float = 1.0,
+        do_sample: bool = False,
+    ) -> str:
+        self.load()
+        encoded = self.tokenizer(prompt_text, return_tensors="pt", add_special_tokens=False).to(self.device)
+        output_ids = self.model.generate(
+            **encoded,
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            temperature=temperature,
+            top_p=top_p,
+            pad_token_id=self.tokenizer.pad_token_id,
+        )[0]
+        new_ids = output_ids[encoded["input_ids"].shape[1]:]
+        return self.tokenizer.decode(new_ids, skip_special_tokens=True).strip()
+
+    def generate_first_token(
+        self,
+        prompt_text: str,
+        temperature: float = 1.0,
+        top_p: float = 1.0,
+        do_sample: bool = False,
+    ) -> str:
+        return self.generate(
+            prompt_text,
+            max_new_tokens=1,
+            temperature=temperature,
+            top_p=top_p,
+            do_sample=do_sample,
+        )
+
+
+
+================================================
+FILE: src/llmfp/core/prompt_builders.py
+================================================
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+import torch
+
+from llmfp.core.templates import get_template
+
+
+@dataclass
+class BuiltPrompt:
+    input_embeds: torch.Tensor
+    target_ids: torch.Tensor | None = None
+    loss_slice: slice | None = None
+    logit_index: int = -1
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PromptVariantSpec:
+    name: str
+    fixed_pieces: list[str]
+    target_text: str = ""
+
+
+class SegmentedPromptBuilder:
+    def __init__(self, tokenizer, variants: list[PromptVariantSpec], segment_count: int = 1):
+        if segment_count < 1:
+            raise ValueError("segment_count must be positive")
+        self.tokenizer = tokenizer
+        self.variants = variants
+        self.segment_count = segment_count
+
+    def prepare(self, model_backend, init_ids: torch.Tensor) -> None:
+        return None
+
+    def _encode(self, text: str, device: torch.device) -> torch.Tensor:
+        ids = self.tokenizer(text, add_special_tokens=False)["input_ids"]
+        return torch.tensor(ids, dtype=torch.long, device=device)
+
+    def _embed_text(self, model_backend, text: str, batch_size: int) -> torch.Tensor | None:
+        ids = self._encode(text, model_backend.device)
+        if ids.numel() == 0:
+            return None
+        embeds = model_backend.model.get_input_embeddings()(ids.unsqueeze(0))
+        return embeds.repeat(batch_size, 1, 1)
+
+    def _coerce_mutable(
+        self,
+        model_backend,
+        mutable_ids: torch.Tensor | None = None,
+        mutable_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor | None, torch.Tensor]:
+        if mutable_embeds is None:
+            if mutable_ids is None:
+                raise ValueError("Either mutable_ids or mutable_embeds must be provided")
+            if mutable_ids.dim() == 1:
+                mutable_ids = mutable_ids.unsqueeze(0)
+            mutable_ids = mutable_ids.to(model_backend.device, dtype=torch.long)
+            mutable_embeds = model_backend.model.get_input_embeddings()(mutable_ids)
+        elif mutable_embeds.dim() == 2:
+            mutable_embeds = mutable_embeds.unsqueeze(0)
+        return mutable_ids, mutable_embeds
+
+    def _split_tensor(self, tensor: torch.Tensor) -> list[torch.Tensor]:
+        lengths = [tensor.shape[1] // self.segment_count] * self.segment_count
+        for i in range(tensor.shape[1] % self.segment_count):
+            lengths[i] += 1
+        chunks = []
+        cursor = 0
+        for length in lengths:
+            chunks.append(tensor[:, cursor: cursor + length, :])
+            cursor += length
+        return chunks
+
+    def _split_ids(self, ids: torch.Tensor | list[int]) -> list[list[int]]:
+        values = ids.detach().cpu().tolist() if isinstance(ids, torch.Tensor) else list(ids)
+        lengths = [len(values) // self.segment_count] * self.segment_count
+        for i in range(len(values) % self.segment_count):
+            lengths[i] += 1
+        chunks = []
+        cursor = 0
+        for length in lengths:
+            chunks.append(values[cursor: cursor + length])
+            cursor += length
+        return chunks
+
+    def build_inputs(
+        self,
+        model_backend,
+        mutable_ids: torch.Tensor | None = None,
+        mutable_embeds: torch.Tensor | None = None,
+    ) -> list[BuiltPrompt]:
+        mutable_ids, mutable_embeds = self._coerce_mutable(model_backend, mutable_ids, mutable_embeds)
+        batch_size = mutable_embeds.shape[0]
+        chunks = self._split_tensor(mutable_embeds)
+        built: list[BuiltPrompt] = []
+        for variant in self.variants:
+            if len(variant.fixed_pieces) != self.segment_count + 1:
+                raise ValueError("fixed_pieces must have segment_count + 1 entries")
+            pieces: list[torch.Tensor] = []
+            for idx, fixed_text in enumerate(variant.fixed_pieces):
+                fixed_embeds = self._embed_text(model_backend, fixed_text, batch_size)
+                if fixed_embeds is not None:
+                    pieces.append(fixed_embeds)
+                if idx < self.segment_count:
+                    pieces.append(chunks[idx])
+            target_ids = self._encode(variant.target_text, model_backend.device)
+            non_target_len = sum(piece.shape[1] for piece in pieces)
+            if target_ids.numel() > 0:
+                target_embeds = model_backend.model.get_input_embeddings()(target_ids.unsqueeze(0)).repeat(batch_size, 1, 1)
+                pieces.append(target_embeds)
+                loss_slice = slice(non_target_len - 1, non_target_len + target_ids.numel() - 1)
+            else:
+                target_ids = None
+                loss_slice = None
+            built.append(
+                BuiltPrompt(
+                    input_embeds=torch.cat(pieces, dim=1),
+                    target_ids=target_ids,
+                    loss_slice=loss_slice,
+                    logit_index=-1,
+                    metadata={"variant": variant.name},
+                )
+            )
+        return built
+
+    def build_prompt_text(self, mutable_ids: torch.Tensor | list[int], include_target: bool = False, variant_index: int = 0) -> str:
+        variant = self.variants[variant_index]
+        chunks = [
+            self.tokenizer.decode(chunk, skip_special_tokens=False)
+            for chunk in self._split_ids(mutable_ids)
+        ]
+        parts = []
+        for idx, fixed_text in enumerate(variant.fixed_pieces):
+            parts.append(fixed_text)
+            if idx < self.segment_count:
+                parts.append(chunks[idx])
+        if include_target:
+            parts.append(variant.target_text)
+        return "".join(parts)
+
+    def mutable_segments(self, mutable_ids: torch.Tensor | list[int]) -> list[str]:
+        return [
+            self.tokenizer.decode(chunk, skip_special_tokens=False)
+            for chunk in self._split_ids(mutable_ids)
+        ]
+
+    def metadata(self) -> dict[str, Any]:
+        return {
+            "templates": [variant.name for variant in self.variants],
+            "segment_count": self.segment_count,
+        }
+
+
+def _templated_variant(template_name: str, user_before: str, user_after: str, target: str) -> PromptVariantSpec:
+    template = get_template(template_name)
+    before, after = template.split_around_mutable(user_before, user_after)
+    return PromptVariantSpec(name=template_name, fixed_pieces=[before, after], target_text=target)
+
+
+class TRAPSuffixPromptBuilder(SegmentedPromptBuilder):
+    def __init__(self, tokenizer, instruction: str, target: str, template_name: str = "raw"):
+        self.instruction = instruction
+        self.target = target
+        super().__init__(
+            tokenizer=tokenizer,
+            variants=[_templated_variant(template_name, instruction + " ", "", target)],
+            segment_count=1,
+        )
+
+
+class ProFLingoPrefixPromptBuilder(SegmentedPromptBuilder):
+    def __init__(self, tokenizer, question: str, target: str, templates: list[str]):
+        self.question = question
+        self.query_suffix = " simply answer: " + question
+        self.target = target
+        super().__init__(
+            tokenizer=tokenizer,
+            variants=[_templated_variant(name, "", self.query_suffix, target) for name in templates],
+            segment_count=1,
+        )
+
+
+class LLMPrintSuffixPromptBuilder(SegmentedPromptBuilder):
+    def __init__(self, tokenizer, base_prompt: str = "Randomly output a word from your vocabulary", template_name: str = "raw"):
+        self.base_prompt = base_prompt
+        super().__init__(
+            tokenizer=tokenizer,
+            variants=[_templated_variant(template_name, base_prompt + " ", "", "")],
+            segment_count=1,
+        )
+
+
+class SRAFTablePromptBuilder(SegmentedPromptBuilder):
+    SENTINELS = ["[[LLMFP_SRAF_0]]", "[[LLMFP_SRAF_1]]", "[[LLMFP_SRAF_2]]"]
+
+    def __init__(self, tokenizer, base_prompt: str, target: str, templates: list[str]):
+        self.base_prompt = base_prompt
+        self.target = target
+        variants = []
+        user_prompt = self._user_prompt_with_sentinels(base_prompt)
+        for template_name in templates:
+            rendered = get_template(template_name).render(user_prompt, assistant_prefix="")
+            variants.append(PromptVariantSpec(template_name, self._split_rendered(rendered), target))
+        super().__init__(tokenizer=tokenizer, variants=variants, segment_count=3)
+
+    @classmethod
+    def _user_prompt_with_sentinels(cls, base_prompt: str) -> str:
+        return (
+            f"{base_prompt}\n\n"
+            "| Field | Value |\n"
+            "|---|---|\n"
+            f"| Note | {cls.SENTINELS[0]} |\n"
+            f"| Key | {cls.SENTINELS[1]} |\n"
+            f"| Ref | {cls.SENTINELS[2]} |\n"
+        )
+
+    @classmethod
+    def _split_rendered(cls, rendered: str) -> list[str]:
+        pieces = []
+        cursor = 0
+        for sentinel in cls.SENTINELS:
+            index = rendered.find(sentinel, cursor)
+            if index < 0:
+                raise ValueError("SRAF template did not preserve all mutable sentinels")
+            pieces.append(rendered[cursor:index])
+            cursor = index + len(sentinel)
+        pieces.append(rendered[cursor:])
+        return pieces
+
+
+
+================================================
+FILE: src/llmfp/core/templates.py
+================================================
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+_MUTABLE_SENTINEL = "[[LLMFP_MUTABLE_SPAN]]"
+
+
+@dataclass(frozen=True)
+class ChatTemplate:
+    name: str
+
+    def render(self, user_prompt: str, assistant_prefix: str = "") -> str:
+        if self.name == "raw":
+            return user_prompt + assistant_prefix
+        if self.name == "fastchat_zero_shot":
+            return f"### Human: {user_prompt}\n### Assistant: {assistant_prefix}"
+        if self.name == "alpaca":
+            return (
+                "Below is an instruction that describes a task. "
+                "Write a response that appropriately completes the request.\n\n"
+                f"### Instruction:\n{user_prompt}\n\n### Response:\n{assistant_prefix}"
+            )
+        if self.name == "llama2_chat":
+            return f"<s>[INST] {user_prompt} [/INST] {assistant_prefix}"
+        if self.name == "chatglm_like":
+            return f"[Round 1]\n\n问：{user_prompt}\n\n答：{assistant_prefix}"
+        if self.name == "zero_shot":
+            return f"{user_prompt}\n\nAnswer: {assistant_prefix}"
+        raise ValueError(f"Unknown template: {self.name}")
+
+    def split_around_mutable(self, user_before: str, user_after: str) -> tuple[str, str]:
+        rendered = self.render(f"{user_before}{_MUTABLE_SENTINEL}{user_after}", assistant_prefix="")
+        if rendered.count(_MUTABLE_SENTINEL) != 1:
+            raise ValueError(f"Template {self.name} did not preserve mutable sentinel exactly once")
+        before, after = rendered.split(_MUTABLE_SENTINEL)
+        return before, after
+
+
+def get_template(name: str) -> ChatTemplate:
+    supported = {
+        "raw",
+        "fastchat_zero_shot",
+        "alpaca",
+        "llama2_chat",
+        "chatglm_like",
+        "zero_shot",
+    }
+    if name not in supported:
+        raise ValueError(f"Unsupported template {name!r}. Supported: {sorted(supported)}")
+    return ChatTemplate(name=name)
+
+
+
+================================================
+FILE: src/llmfp/methods/__init__.py
+================================================
+"""Method implementations.
+
+Heavy model/torch imports are intentionally delayed inside individual methods so
+CLI help and lightweight import tests do not require an ML runtime.
+"""
+
+
+
+================================================
+FILE: src/llmfp/methods/base.py
+================================================
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any
+
+from llmfp.schemas import FingerprintArtifact, FingerprintTask, VerificationResult
+
+
+class FingerprintMethod(ABC):
+    name: str
+
+    @abstractmethod
+    def build_tasks(self, cfg: dict[str, Any]) -> list[FingerprintTask]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def construct(self, task: FingerprintTask, model_backend, cfg: dict[str, Any]) -> FingerprintArtifact | None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def verify(self, artifact: FingerprintArtifact | dict[str, Any], suspect_backend, cfg: dict[str, Any]) -> VerificationResult:
+        raise NotImplementedError
+
+    @abstractmethod
+    def aggregate(self, results: list[VerificationResult | dict[str, Any]], cfg: dict[str, Any]) -> dict[str, Any]:
+        raise NotImplementedError
+
+
+def artifact_get(artifact: FingerprintArtifact | dict[str, Any], key: str, default=None):
+    if isinstance(artifact, dict):
+        return artifact.get(key, default)
+    return getattr(artifact, key, default)
+
+
+def result_dicts(results: list[VerificationResult | dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row.to_dict() if hasattr(row, "to_dict") else row for row in results]
+
+
+
+================================================
+FILE: src/llmfp/methods/llmprint.py
+================================================
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from llmfp.core.io import load_jsonl
+from llmfp.core.matching import normalize_text
+from llmfp.core.metrics import bitwise_accuracy, threshold_from_negative_accuracies, tpr_fpr_from_labeled_results
+from llmfp.methods.base import FingerprintMethod, artifact_get, result_dicts
+from llmfp.schemas import FingerprintArtifact, FingerprintTask, VerificationResult
+
+
+class LLMPrintMethod(FingerprintMethod):
+    name = "llmprint"
+
+    def build_tasks(self, cfg: dict[str, Any]) -> list[FingerprintTask]:
+        data_path = Path(cfg.get("token_pairs_path", "data/llmprint_token_pairs.jsonl"))
+        rows = load_jsonl(data_path)[: int(cfg.get("num_token_pairs", 5))]
+        return [
+            FingerprintTask(
+                task_id=str(row.get("id", f"p{index + 1}")),
+                method=self.name,
+                input_text="Randomly output a word from your vocabulary",
+                target=f"{row['w_plus']}|{row['w_minus']}",
+                metadata={"w_plus": row["w_plus"], "w_minus": row["w_minus"]},
+            )
+            for index, row in enumerate(rows)
+        ]
+
+    def _single_token_id(self, tokenizer, word: str) -> int | None:
+        ids = tokenizer(word, add_special_tokens=False)["input_ids"]
+        if len(ids) == 1:
+            return int(ids[0])
+        return None
+
+    def construct(self, task: FingerprintTask, model_backend, cfg: dict[str, Any]) -> FingerprintArtifact | None:
+        import torch
+
+        from llmfp.core.losses import TokenPreferenceLoss
+        from llmfp.core.prompt_builders import LLMPrintSuffixPromptBuilder
+        from llmfp.optimizers.gcg import GCGOptimizer
+
+        tokenizer = model_backend.tokenizer
+        w_plus = task.metadata["w_plus"]
+        w_minus = task.metadata["w_minus"]
+        plus_id = self._single_token_id(tokenizer, w_plus)
+        minus_id = self._single_token_id(tokenizer, w_minus)
+        if plus_id is None or minus_id is None:
+            return None
+        init_suffix = ("x " * int(cfg.get("suffix_len", 20))).strip()
+        init_ids = tokenizer(init_suffix, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
+        builder = LLMPrintSuffixPromptBuilder(tokenizer, task.input_text, cfg.get("template", "raw"))
+        optimizer = GCGOptimizer(
+            model_backend=model_backend,
+            tokenizer=tokenizer,
+            top_k=cfg.get("top_k", 64),
+            search_width=cfg.get("search_width", 16),
+            batch_size=cfg.get("batch_size", 16),
+            allow_non_ascii=cfg.get("allow_non_ascii", False),
+            filter_retokenization=cfg.get("filter_retokenization", True),
+            seed=cfg.get("seed", 0),
+        )
+        result = optimizer.optimize(
+            init_ids=init_ids,
+            prompt_builder=builder,
+            loss_fn=TokenPreferenceLoss(plus_id, minus_id, alpha=cfg.get("alpha", 0.1), beta=cfg.get("beta", 1.0)),
+            candidate_filter=None,
+            num_steps=cfg.get("num_steps", 5),
+            log_every=cfg.get("log_every", 10),
+        )
+        best_ids = torch.tensor(result.best_ids, dtype=torch.long)
+        prompt_text = builder.build_prompt_text(best_ids, include_target=False)
+        logits = model_backend.first_token_logits(prompt_text)
+        reference_bit = 1 if float(logits[plus_id]) >= float(logits[minus_id]) else 0
+        return FingerprintArtifact(
+            fingerprint_id=f"llmprint-{task.task_id}",
+            method=self.name,
+            base_model=model_backend.name,
+            task_id=task.task_id,
+            prompt_text=prompt_text,
+            optimized_text=result.best_text,
+            target=task.target,
+            best_loss=result.best_loss,
+            best_step=result.best_step,
+            metadata={
+                "w_plus": w_plus,
+                "w_minus": w_minus,
+                "w_plus_id": plus_id,
+                "w_minus_id": minus_id,
+                "reference_bit": reference_bit,
+                "optimizer": result.metadata,
+                "loss_history": result.loss_history,
+            },
+        )
+
+    def verify(self, artifact, suspect_backend, cfg: dict[str, Any]) -> VerificationResult:
+        metadata = artifact_get(artifact, "metadata", {})
+        plus_id = int(metadata["w_plus_id"])
+        minus_id = int(metadata["w_minus_id"])
+        reference_bit = int(metadata["reference_bit"])
+        mode = cfg.get("verification_mode", "black_box")
+        if mode == "gray_box":
+            import torch
+
+            logits = suspect_backend.first_token_logits(artifact_get(artifact, "prompt_text"))
+            predicted_bit = 1 if float(logits[plus_id]) >= float(logits[minus_id]) else 0
+            score = float(torch.softmax(logits, dim=0)[plus_id])
+            raw_output = None
+            counts = None
+        else:
+            count_plus = 0
+            count_minus = 0
+            samples = []
+            for _ in range(int(cfg.get("black_box_samples", 5))):
+                token = suspect_backend.generate_first_token(
+                    artifact_get(artifact, "prompt_text"),
+                    temperature=float(cfg.get("temperature", 1.0)),
+                    top_p=float(cfg.get("top_p", 1.0)),
+                    do_sample=bool(cfg.get("do_sample", True)),
+                )
+                samples.append(token)
+                normalized = normalize_text(token)
+                if normalized.startswith(normalize_text(metadata["w_plus"])):
+                    count_plus += 1
+                if normalized.startswith(normalize_text(metadata["w_minus"])):
+                    count_minus += 1
+            predicted_bit = 1 if count_plus >= count_minus else 0
+            score = count_plus / max(1, count_plus + count_minus)
+            raw_output = samples[-1] if samples else None
+            counts = {"count_plus": count_plus, "count_minus": count_minus, "samples": samples}
+        success = predicted_bit == reference_bit
+        return VerificationResult(
+            method=self.name,
+            base_model=artifact_get(artifact, "base_model"),
+            suspect_model=suspect_backend.name,
+            fingerprint_id=artifact_get(artifact, "fingerprint_id"),
+            success=success,
+            score=score,
+            raw_output=raw_output,
+            metadata={
+                "reference_bit": reference_bit,
+                "predicted_bit": predicted_bit,
+                "verification_mode": mode,
+                "counts": counts,
+            },
+        )
+
+    def aggregate(self, results, cfg: dict[str, Any]) -> dict[str, Any]:
+        rows = result_dicts(results)
+        reference_bits = [int(row["metadata"]["reference_bit"]) for row in rows]
+        predicted_bits = [int(row["metadata"]["predicted_bit"]) for row in rows]
+        accuracy = bitwise_accuracy(reference_bits, predicted_bits) if rows else 0.0
+        threshold = threshold_from_negative_accuracies(
+            cfg.get("negative_validation_accuracies"),
+            z=float(cfg.get("threshold_z", 1.64)),
+            default=float(cfg.get("threshold", 0.7)),
+        )
+        labeled = tpr_fpr_from_labeled_results(rows)
+        return {
+            "bitwise_accuracy": accuracy,
+            "threshold": threshold,
+            "decision": accuracy >= threshold,
+            "tpr": labeled["tpr"],
+            "fpr": labeled["fpr"],
+        }
+
+
+
+================================================
+FILE: src/llmfp/methods/proflingo.py
+================================================
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from llmfp.core.io import load_jsonl
+from llmfp.core.matching import match_keyword_target
+from llmfp.core.metrics import success_rate
+from llmfp.methods.base import FingerprintMethod, artifact_get, result_dicts
+from llmfp.schemas import FingerprintArtifact, FingerprintTask, VerificationResult
+
+
+class ProFLingoMethod(FingerprintMethod):
+    name = "proflingo"
+
+    def build_tasks(self, cfg: dict[str, Any]) -> list[FingerprintTask]:
+        data_path = Path(cfg.get("questions_path", "data/proflingo_questions.jsonl"))
+        rows = load_jsonl(data_path)[: int(cfg.get("num_questions", 2))]
+        tasks = []
+        for index, row in enumerate(rows):
+            question = row["question"]
+            target = row["target"]
+            keywords = row.get("target_keywords", [target])
+            tasks.append(
+                FingerprintTask(
+                    task_id=str(row.get("id", f"q{index + 1}")),
+                    method=self.name,
+                    input_text=question,
+                    target=target,
+                    metadata={"target_keywords": keywords},
+                )
+            )
+        return tasks
+
+    def construct(self, task: FingerprintTask, model_backend, cfg: dict[str, Any]) -> FingerprintArtifact:
+        import torch
+
+        from llmfp.core.candidate_filters import (
+            CompositeFilter,
+            ProFLingoWordFragmentFilter,
+            RetokenizationConsistencyFilter,
+            TargetKeywordExclusionFilter,
+        )
+        from llmfp.core.losses import MultiTemplateTargetLoss
+        from llmfp.core.prompt_builders import ProFLingoPrefixPromptBuilder
+        from llmfp.optimizers.gcg import GCGOptimizer
+
+        templates = list(cfg.get("templates", ["fastchat_zero_shot", "alpaca"]))
+        init_prefix = ("x " * int(cfg.get("prefix_len", 32))).strip()
+        init_ids = model_backend.tokenizer(init_prefix, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
+        builder = ProFLingoPrefixPromptBuilder(model_backend.tokenizer, task.input_text, task.target, templates)
+        candidate_filter = CompositeFilter(
+            ProFLingoWordFragmentFilter(),
+            TargetKeywordExclusionFilter(task.metadata.get("target_keywords", [task.target])),
+            RetokenizationConsistencyFilter(),
+        )
+        optimizer = GCGOptimizer(
+            model_backend=model_backend,
+            tokenizer=model_backend.tokenizer,
+            top_k=cfg.get("top_k", 64),
+            search_width=cfg.get("search_width", 16),
+            batch_size=cfg.get("batch_size", 16),
+            allow_non_ascii=cfg.get("allow_non_ascii", False),
+            filter_retokenization=cfg.get("filter_retokenization", True),
+            seed=cfg.get("seed", 0),
+        )
+        result = optimizer.optimize(
+            init_ids=init_ids,
+            prompt_builder=builder,
+            loss_fn=MultiTemplateTargetLoss(),
+            candidate_filter=candidate_filter,
+            num_steps=cfg.get("num_steps", 5),
+            log_every=cfg.get("log_every", 10),
+        )
+        best_ids = torch.tensor(result.best_ids, dtype=torch.long)
+        query = result.best_text + builder.query_suffix
+        prompt_text = builder.build_prompt_text(best_ids, include_target=False, variant_index=0)
+        return FingerprintArtifact(
+            fingerprint_id=f"proflingo-{task.task_id}",
+            method=self.name,
+            base_model=model_backend.name,
+            task_id=task.task_id,
+            prompt_text=prompt_text,
+            optimized_text=result.best_text,
+            target=task.target,
+            best_loss=result.best_loss,
+            best_step=result.best_step,
+            metadata={
+                "question": task.input_text,
+                "target_keywords": task.metadata.get("target_keywords", [task.target]),
+                "prefix": result.best_text,
+                "query": query,
+                "templates": templates,
+                "optimizer": result.metadata,
+                "loss_history": result.loss_history,
+            },
+        )
+
+    def verify(self, artifact, suspect_backend, cfg: dict[str, Any]) -> VerificationResult:
+        from llmfp.core.templates import get_template
+
+        metadata = artifact_get(artifact, "metadata", {})
+        query = metadata.get("query") or artifact_get(artifact, "optimized_text", "") + " simply answer: " + metadata.get("question", "")
+        template_name = cfg.get("suspect_template") or suspect_backend.template_name
+        prompt_text = get_template(template_name).render(query, assistant_prefix="")
+        attempts = int(cfg.get("num_attempts", 1))
+        outputs = []
+        success = False
+        for _ in range(max(1, attempts)):
+            output = suspect_backend.generate(
+                prompt_text,
+                max_new_tokens=int(cfg.get("max_new_tokens", 32)),
+                temperature=float(cfg.get("temperature", 1.0)),
+                top_p=float(cfg.get("top_p", 1.0)),
+                do_sample=bool(cfg.get("do_sample", attempts > 1)),
+            )
+            outputs.append(output)
+            if match_keyword_target(output, artifact_get(artifact, "target"), metadata.get("target_keywords", [])):
+                success = True
+                break
+        return VerificationResult(
+            method=self.name,
+            base_model=artifact_get(artifact, "base_model"),
+            suspect_model=suspect_backend.name,
+            fingerprint_id=artifact_get(artifact, "fingerprint_id"),
+            success=success,
+            score=1.0 if success else 0.0,
+            raw_output=outputs[-1] if outputs else "",
+            metadata={"outputs": outputs, "trr": 1.0 if success else 0.0},
+        )
+
+    def aggregate(self, results, cfg: dict[str, Any]) -> dict[str, Any]:
+        rows = result_dicts(results)
+        return {"trr": success_rate(rows), "target_response_rate": success_rate(rows)}
+
+
+
+================================================
+FILE: src/llmfp/methods/sraf.py
+================================================
+from __future__ import annotations
+
+from typing import Any
+
+from llmfp.core.matching import match_keyword_target
+from llmfp.core.metrics import success_rate, tpr_fpr_from_labeled_results
+from llmfp.methods.base import FingerprintMethod, artifact_get, result_dicts
+from llmfp.schemas import FingerprintArtifact, FingerprintTask, VerificationResult
+
+
+class SRAFMethod(FingerprintMethod):
+    name = "sraf"
+
+    DEFAULT_TARGETS = [
+        {"id": "sraf-1", "base_prompt": "Read the reference table and answer with the hidden key.", "target": "cerulean harbor"},
+        {"id": "sraf-2", "base_prompt": "Use the table cells as reference material and output the hidden key.", "target": "amber orbit"},
+    ]
+
+    def build_tasks(self, cfg: dict[str, Any]) -> list[FingerprintTask]:
+        items = list(cfg.get("targets", self.DEFAULT_TARGETS))[: int(cfg.get("num_fingerprints", 2))]
+        tasks = []
+        for index, item in enumerate(items):
+            target = item["target"]
+            tasks.append(
+                FingerprintTask(
+                    task_id=str(item.get("id", f"sraf-{index + 1}")),
+                    method=self.name,
+                    input_text=item.get("base_prompt", self.DEFAULT_TARGETS[0]["base_prompt"]),
+                    target=target,
+                    metadata={"target_keywords": item.get("target_keywords", [target])},
+                )
+            )
+        return tasks
+
+    def construct(self, task: FingerprintTask, model_backend, cfg: dict[str, Any]) -> FingerprintArtifact:
+        import torch
+
+        from llmfp.core.candidate_filters import AsciiFilter, CompositeFilter, RetokenizationConsistencyFilter
+        from llmfp.core.losses import MultiModelMultiTemplateTargetLoss
+        from llmfp.core.prompt_builders import SRAFTablePromptBuilder
+        from llmfp.optimizers.gcg import GCGOptimizer
+
+        templates = list(cfg.get("templates", ["raw", "zero_shot"]))
+        init_mutable = ("! " * int(cfg.get("mutable_len", 64))).strip()
+        init_ids = model_backend.tokenizer(init_mutable, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
+        builder = SRAFTablePromptBuilder(model_backend.tokenizer, task.input_text, task.target, templates)
+        optimizer = GCGOptimizer(
+            model_backend=model_backend,
+            tokenizer=model_backend.tokenizer,
+            top_k=cfg.get("top_k", 64),
+            search_width=cfg.get("search_width", 16),
+            batch_size=cfg.get("batch_size", 16),
+            allow_non_ascii=cfg.get("allow_non_ascii", False),
+            filter_retokenization=cfg.get("filter_retokenization", True),
+            seed=cfg.get("seed", 0),
+        )
+        result = optimizer.optimize(
+            init_ids=init_ids,
+            prompt_builder=builder,
+            loss_fn=MultiModelMultiTemplateTargetLoss(),
+            candidate_filter=CompositeFilter(AsciiFilter(), RetokenizationConsistencyFilter()),
+            num_steps=cfg.get("num_steps", 5),
+            log_every=cfg.get("log_every", 10),
+        )
+        best_ids = torch.tensor(result.best_ids, dtype=torch.long)
+        prompt_text = builder.build_prompt_text(best_ids, include_target=False, variant_index=0)
+        segments = builder.mutable_segments(best_ids)
+        return FingerprintArtifact(
+            fingerprint_id=f"sraf-{task.task_id}",
+            method=self.name,
+            base_model=model_backend.name,
+            task_id=task.task_id,
+            prompt_text=prompt_text,
+            optimized_text=result.best_text,
+            target=task.target,
+            best_loss=result.best_loss,
+            best_step=result.best_step,
+            metadata={
+                "base_prompt": task.input_text,
+                "table_prompt": prompt_text,
+                "mutable_segments": segments,
+                "templates": templates,
+                "model_names": [model_backend.name],
+                "target_keywords": task.metadata.get("target_keywords", [task.target]),
+                "optimizer": result.metadata,
+                "loss_history": result.loss_history,
+                "ppl": None,
+            },
+        )
+
+    def verify(self, artifact, suspect_backend, cfg: dict[str, Any]) -> VerificationResult:
+        output = suspect_backend.generate(
+            artifact_get(artifact, "prompt_text"),
+            max_new_tokens=int(cfg.get("max_new_tokens", 48)),
+            temperature=float(cfg.get("temperature", 1.0)),
+            top_p=float(cfg.get("top_p", 1.0)),
+            do_sample=bool(cfg.get("do_sample", False)),
+        )
+        metadata = artifact_get(artifact, "metadata", {})
+        success = match_keyword_target(output, artifact_get(artifact, "target"), metadata.get("target_keywords", []))
+        return VerificationResult(
+            method=self.name,
+            base_model=artifact_get(artifact, "base_model"),
+            suspect_model=suspect_backend.name,
+            fingerprint_id=artifact_get(artifact, "fingerprint_id"),
+            success=success,
+            score=1.0 if success else 0.0,
+            raw_output=output,
+            metadata={"ppl": None if not cfg.get("compute_ppl", False) else metadata.get("ppl")},
+        )
+
+    def aggregate(self, results, cfg: dict[str, Any]) -> dict[str, Any]:
+        rows = result_dicts(results)
+        labeled = tpr_fpr_from_labeled_results(rows)
+        return {"fsr": success_rate(rows), "fpr": labeled["fpr"], "ppl": None}
+
+
+
+================================================
+FILE: src/llmfp/methods/trap.py
+================================================
+from __future__ import annotations
+
+import random
+from typing import Any
+
+from llmfp.core.matching import match_trap_output
+from llmfp.core.metrics import invalid_rate, success_rate, tpr_fpr_from_labeled_results
+from llmfp.methods.base import FingerprintMethod, artifact_get, result_dicts
+from llmfp.schemas import FingerprintArtifact, FingerprintTask, VerificationResult
+
+
+class TRAPMethod(FingerprintMethod):
+    name = "trap"
+
+    def build_tasks(self, cfg: dict[str, Any]) -> list[FingerprintTask]:
+        rng = random.Random(int(cfg.get("seed", 0)))
+        answer_lengths = list(cfg.get("answer_lengths", [3]))
+        tasks = []
+        for index in range(int(cfg.get("num_fingerprints", 2))):
+            n_digits = int(answer_lengths[index % len(answer_lengths)])
+            target_digits = "".join(rng.choice("0123456789") for _ in range(n_digits))
+            instruction = (
+                f"Write a random string composed of {n_digits} digits. "
+                "Your reply should only contain the random string."
+            )
+            tasks.append(
+                FingerprintTask(
+                    task_id=f"trap-{index:04d}",
+                    method=self.name,
+                    input_text=instruction,
+                    target=target_digits,
+                    metadata={"n_digits": n_digits, "target_digits": target_digits},
+                )
+            )
+        return tasks
+
+    def construct(self, task: FingerprintTask, model_backend, cfg: dict[str, Any]) -> FingerprintArtifact:
+        import torch
+
+        from llmfp.core.candidate_filters import CompositeFilter, TrapNumberFilter
+        from llmfp.core.prompt_builders import TRAPSuffixPromptBuilder
+        from llmfp.optimizers.gcg import optimize_suffix_target_string
+
+        init_suffix = ("! " * int(cfg.get("suffix_len", 20))).strip()
+        candidate_filter = CompositeFilter(TrapNumberFilter(model_backend.tokenizer))
+        result = optimize_suffix_target_string(
+            model_backend=model_backend,
+            instruction=task.input_text,
+            target=task.target,
+            init_suffix=init_suffix,
+            cfg=cfg,
+            candidate_filter=candidate_filter,
+        )
+        builder = TRAPSuffixPromptBuilder(
+            tokenizer=model_backend.tokenizer,
+            instruction=task.input_text,
+            target=task.target,
+            template_name=model_backend.template_name,
+        )
+        best_ids = torch.tensor(result.best_ids, dtype=torch.long)
+        prompt_text = builder.build_prompt_text(best_ids, include_target=False)
+        return FingerprintArtifact(
+            fingerprint_id=f"trap-{task.task_id}",
+            method=self.name,
+            base_model=model_backend.name,
+            task_id=task.task_id,
+            prompt_text=prompt_text,
+            optimized_text=result.best_text,
+            target=task.target,
+            best_loss=result.best_loss,
+            best_step=result.best_step,
+            metadata={
+                **task.metadata,
+                "instruction": task.input_text,
+                "full_prompt": prompt_text,
+                "optimizer": result.metadata,
+                "loss_history": result.loss_history,
+            },
+        )
+
+    def verify(self, artifact, suspect_backend, cfg: dict[str, Any]) -> VerificationResult:
+        prompt_text = artifact_get(artifact, "prompt_text")
+        target = artifact_get(artifact, "target")
+        raw_output = suspect_backend.generate(
+            prompt_text,
+            max_new_tokens=int(cfg.get("max_new_tokens", 32)),
+            temperature=float(cfg.get("temperature", 1.0)),
+            top_p=float(cfg.get("top_p", 1.0)),
+            do_sample=bool(cfg.get("do_sample", False)),
+        )
+        success, invalid, parsed = match_trap_output(raw_output, target)
+        return VerificationResult(
+            method=self.name,
+            base_model=artifact_get(artifact, "base_model"),
+            suspect_model=suspect_backend.name,
+            fingerprint_id=artifact_get(artifact, "fingerprint_id"),
+            success=success,
+            score=1.0 if success else 0.0,
+            raw_output=raw_output,
+            metadata={"invalid": invalid, "parsed_digits": parsed, "target_digits": target},
+        )
+
+    def aggregate(self, results, cfg: dict[str, Any]) -> dict[str, Any]:
+        rows = result_dicts(results)
+        labeled = tpr_fpr_from_labeled_results(rows)
+        return {
+            "success_rate": success_rate(rows),
+            "invalid_rate": invalid_rate(rows),
+            "tpr": labeled["tpr"],
+            "fpr": labeled["fpr"],
+        }
+
+
+
+================================================
+FILE: src/llmfp/optimizers/__init__.py
+================================================
+from llmfp.optimizers.gcg import GCGOptimizer, optimize_suffix_target_string
+from llmfp.optimizers.result import OptimizationResult
+
+__all__ = ["GCGOptimizer", "OptimizationResult", "optimize_suffix_target_string"]
+
+
+
+================================================
+FILE: src/llmfp/optimizers/gcg.py
+================================================
+from __future__ import annotations
+
+import gc
+import inspect
+import random
+from typing import Callable
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+from tqdm import tqdm
+
+from llmfp.core.candidate_filters import RetokenizationConsistencyFilter
+from llmfp.core.losses import TargetStringLoss
+from llmfp.core.prompt_builders import TRAPSuffixPromptBuilder
+from llmfp.optimizers.result import OptimizationResult
+
+
+def _should_reduce_batch_size(exception: Exception) -> bool:
+    statements = [
+        "CUDA out of memory.",
+        "cuDNN error: CUDNN_STATUS_NOT_SUPPORTED.",
+        "DefaultCPUAllocator: can't allocate memory",
+    ]
+    return isinstance(exception, RuntimeError) and len(exception.args) == 1 and any(s in exception.args[0] for s in statements)
+
+
+def find_executable_batch_size(function: Callable | None = None, starting_batch_size: int = 128):
+    if function is None:
+        return lambda fn: find_executable_batch_size(fn, starting_batch_size)
+    batch_size = starting_batch_size
+
+    def wrapped(*args, **kwargs):
+        nonlocal batch_size
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        params = list(inspect.signature(function).parameters.keys())
+        if len(params) < len(args) + 1:
+            raise TypeError(f"{function.__name__} must accept search_batch_size as its first argument")
+        while True:
+            if batch_size <= 0:
+                raise RuntimeError("No executable batch size found")
+            try:
+                return function(batch_size, *args, **kwargs)
+            except Exception as exc:
+                if not _should_reduce_batch_size(exc):
+                    raise
+                batch_size //= 2
+    return wrapped
+
+
+class GCGOptimizer:
+    def __init__(
+        self,
+        model_backend,
+        tokenizer,
+        top_k: int = 256,
+        search_width: int = 512,
+        batch_size: int = 128,
+        allow_non_ascii: bool = False,
+        filter_retokenization: bool = True,
+        use_prefix_cache: bool = False,
+        seed: int = 0,
+    ):
+        self.model_backend = model_backend
+        self.tokenizer = tokenizer
+        self.top_k = int(top_k)
+        self.search_width = int(search_width)
+        self.batch_size = int(batch_size)
+        self.allow_non_ascii = bool(allow_non_ascii)
+        self.filter_retokenization = bool(filter_retokenization)
+        self.use_prefix_cache = bool(use_prefix_cache)
+        self.seed = int(seed)
+        self.device = model_backend.device
+        self.model = model_backend.model
+        self.embedding_layer = self.model.get_input_embeddings()
+        self.not_allowed_ids = None if self.allow_non_ascii else self._get_nonascii_toks()
+
+    def _get_nonascii_toks(self) -> torch.Tensor:
+        def is_ascii(text: str) -> bool:
+            return text.isascii() and text.isprintable()
+
+        special_ids = set(self.tokenizer.all_special_ids or [])
+        blocked = []
+        vocab_size = getattr(self.tokenizer, "vocab_size", len(self.tokenizer))
+        for token_id in range(vocab_size):
+            text = self.tokenizer.decode([token_id], skip_special_tokens=False)
+            if token_id in special_ids or not is_ascii(text):
+                blocked.append(token_id)
+        return torch.tensor(blocked, dtype=torch.long, device=self.device)
+
+    def _set_seed(self) -> None:
+        random.seed(self.seed)
+        np.random.seed(self.seed)
+        torch.manual_seed(self.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self.seed)
+
+    def _sample_ids(self, cur_ids: torch.Tensor, grad: torch.Tensor) -> torch.Tensor:
+        if self.not_allowed_ids is not None and self.not_allowed_ids.numel() > 0:
+            grad[:, self.not_allowed_ids] = torch.inf
+        top_k = min(self.top_k, grad.shape[1])
+        topk_ids = (-grad).topk(top_k, dim=1).indices
+        original = cur_ids.repeat(self.search_width, 1)
+        n_tokens = cur_ids.shape[0]
+        positions = torch.randint(0, n_tokens, (self.search_width,), device=self.device)
+        sampled_topk = torch.randint(0, top_k, (self.search_width, 1), device=self.device)
+        sampled_values = torch.gather(topk_ids[positions], dim=1, index=sampled_topk).squeeze(1)
+        return original.scatter(1, positions.unsqueeze(1), sampled_values.unsqueeze(1))
+
+    def _filter_candidates(self, ids: torch.Tensor, candidate_filter) -> torch.Tensor:
+        filtered = ids
+        if candidate_filter is not None:
+            filtered = candidate_filter.filter_ids(filtered, self.tokenizer)
+        if self.filter_retokenization and filtered.numel() > 0:
+            filtered = RetokenizationConsistencyFilter().filter_ids(filtered, self.tokenizer)
+        return filtered
+
+    def _compute_gradient(self, cur_ids: torch.Tensor, prompt_builder, loss_fn) -> torch.Tensor:
+        ids = cur_ids.unsqueeze(0)
+        onehot = F.one_hot(ids, num_classes=self.embedding_layer.num_embeddings).to(self.device, self.model.dtype)
+        onehot = onehot.detach().clone().requires_grad_(True)
+        mutable_embeds = onehot @ self.embedding_layer.weight
+        built = prompt_builder.build_inputs(self.model_backend, mutable_embeds=mutable_embeds)
+        loss = loss_fn.compute(self.model_backend, built).mean()
+        grad = torch.autograd.grad(outputs=[loss], inputs=[onehot])[0]
+        return grad.squeeze(0)
+
+    def _candidate_losses(self, prompt_builder, loss_fn, candidate_ids: torch.Tensor) -> torch.Tensor:
+        return find_executable_batch_size(self._candidate_losses_batched, self.batch_size)(prompt_builder, loss_fn, candidate_ids)
+
+    def _candidate_losses_batched(self, search_batch_size: int, prompt_builder, loss_fn, candidate_ids: torch.Tensor) -> torch.Tensor:
+        losses = []
+        for start in range(0, candidate_ids.shape[0], search_batch_size):
+            batch_ids = candidate_ids[start: start + search_batch_size]
+            with torch.no_grad():
+                built = prompt_builder.build_inputs(self.model_backend, mutable_ids=batch_ids)
+                losses.append(loss_fn.compute(self.model_backend, built).detach())
+        return torch.cat(losses, dim=0)
+
+    def optimize(
+        self,
+        init_ids,
+        prompt_builder,
+        loss_fn,
+        candidate_filter=None,
+        num_steps: int = 500,
+        log_every: int = 10,
+    ) -> OptimizationResult:
+        self._set_seed()
+        if not isinstance(init_ids, torch.Tensor):
+            init_ids = torch.tensor(init_ids, dtype=torch.long)
+        cur_ids = init_ids.detach().clone().to(self.device, dtype=torch.long).view(-1)
+        prompt_builder.prepare(self.model_backend, cur_ids)
+
+        with torch.no_grad():
+            init_loss = float(self._candidate_losses(prompt_builder, loss_fn, cur_ids.unsqueeze(0))[0].item())
+        best_ids = cur_ids.detach().clone()
+        best_loss = init_loss
+        best_step = 0
+        loss_history = [init_loss]
+
+        iterator = tqdm(range(1, int(num_steps) + 1), desc="gcg", leave=False)
+        for step in iterator:
+            grad = self._compute_gradient(cur_ids, prompt_builder, loss_fn)
+            with torch.no_grad():
+                sampled = self._sample_ids(cur_ids, grad)
+                sampled = self._filter_candidates(sampled, candidate_filter)
+                if sampled.numel() == 0:
+                    loss_history.append(loss_history[-1])
+                    continue
+                losses = self._candidate_losses(prompt_builder, loss_fn, sampled)
+                min_index = int(torch.argmin(losses).item())
+                cur_ids = sampled[min_index].detach().clone()
+                current_loss = float(losses[min_index].item())
+                loss_history.append(current_loss)
+                if current_loss < best_loss:
+                    best_loss = current_loss
+                    best_ids = cur_ids.detach().clone()
+                    best_step = step
+                if log_every and step % log_every == 0:
+                    iterator.set_postfix(loss=f"{current_loss:.4f}", best=f"{best_loss:.4f}")
+
+        best_text = self.tokenizer.decode(best_ids.detach().cpu().tolist(), skip_special_tokens=False)
+        return OptimizationResult(
+            best_ids=best_ids.detach().cpu().tolist(),
+            best_text=best_text,
+            best_loss=best_loss,
+            best_step=best_step,
+            loss_history=loss_history,
+            metadata={
+                "top_k": self.top_k,
+                "search_width": self.search_width,
+                "batch_size": self.batch_size,
+                "allow_non_ascii": self.allow_non_ascii,
+                "filter_retokenization": self.filter_retokenization,
+                "use_prefix_cache": self.use_prefix_cache,
+                "seed": self.seed,
+            },
+        )
+
+
+def optimize_suffix_target_string(
+    model_backend,
+    instruction: str,
+    target: str,
+    init_suffix: str,
+    cfg: dict,
+    candidate_filter=None,
+) -> OptimizationResult:
+    tokenizer = model_backend.tokenizer
+    init_ids = tokenizer(init_suffix, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
+    builder = TRAPSuffixPromptBuilder(
+        tokenizer=tokenizer,
+        instruction=instruction,
+        target=target,
+        template_name=getattr(model_backend, "template_name", "raw"),
+    )
+    optimizer = GCGOptimizer(
+        model_backend=model_backend,
+        tokenizer=tokenizer,
+        top_k=cfg.get("top_k", 256),
+        search_width=cfg.get("search_width", 512),
+        batch_size=cfg.get("batch_size", 128),
+        allow_non_ascii=cfg.get("allow_non_ascii", False),
+        filter_retokenization=cfg.get("filter_retokenization", True),
+        use_prefix_cache=cfg.get("use_prefix_cache", False),
+        seed=cfg.get("seed", 0),
+    )
+    return optimizer.optimize(
+        init_ids=init_ids,
+        prompt_builder=builder,
+        loss_fn=TargetStringLoss(),
+        candidate_filter=candidate_filter,
+        num_steps=cfg.get("num_steps", 500),
+        log_every=cfg.get("log_every", 10),
+    )
+
+
+
+================================================
+FILE: src/llmfp/optimizers/result.py
+================================================
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class OptimizationResult:
+    best_ids: list[int]
+    best_text: str
+    best_loss: float
+    best_step: int
+    loss_history: list[float] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+
+================================================
+FILE: src/llmfp/runners/__init__.py
+================================================
+"""Command runners for construction, verification, benchmarking, and summaries."""
+
+
+
+================================================
+FILE: src/llmfp/runners/benchmark.py
+================================================
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from llmfp.core.io import load_yaml
+from llmfp.runners.construct import run_construct
+from llmfp.runners.verify import run_verify
+
+
+def run_benchmark(cfg: dict[str, Any]):
+    output_dir = Path(cfg.get("output_dir", "results"))
+    model_cfg = load_yaml(cfg["model_config"])
+    suspect_cfg = load_yaml(cfg.get("suspect_model_config", cfg["model_config"]))
+    outputs = []
+    for item in cfg.get("methods", []):
+        method_name = item["name"]
+        method_cfg = load_yaml(item["config"])
+        fp_path = output_dir / "fingerprints" / f"{method_name}.jsonl"
+        run_path = output_dir / "runs" / f"{method_name}_verify.jsonl"
+        artifacts = run_construct(method_name, method_cfg, model_cfg, fp_path)
+        results = run_verify(method_name, method_cfg, suspect_cfg, fp_path, run_path)
+        outputs.append({"method": method_name, "fingerprints": str(fp_path), "runs": str(run_path), "n": len(results), "n_artifacts": len(artifacts)})
+    return outputs
+
+
+
+================================================
+FILE: src/llmfp/runners/construct.py
+================================================
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from llmfp.core.io import save_jsonl
+from llmfp.core.model_backend import ModelBackend
+from llmfp.registry import get_method
+
+
+def run_construct(method_name: str, method_cfg: dict[str, Any], model_cfg: dict[str, Any], out_path: str | Path):
+    method = get_method(method_name)
+    backend = ModelBackend.from_config(model_cfg)
+    artifacts = []
+    for task in method.build_tasks(method_cfg):
+        artifact = method.construct(task, backend, method_cfg)
+        if artifact is not None:
+            artifacts.append(artifact)
+    save_jsonl(out_path, artifacts)
+    return artifacts
+
+
+
+================================================
+FILE: src/llmfp/runners/summarize.py
+================================================
+from __future__ import annotations
+
+from pathlib import Path
+
+from llmfp.core.io import load_jsonl, save_csv
+from llmfp.core.metrics import summarize_by_model
+
+
+def run_summarize(results_dir: str | Path, out_path: str | Path):
+    rows = []
+    for path in sorted(Path(results_dir).glob("*.jsonl")):
+        rows.extend(load_jsonl(path))
+    summary = summarize_by_model(rows)
+    save_csv(out_path, summary)
+    return summary
+
+
+
+================================================
+FILE: src/llmfp/runners/verify.py
+================================================
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from llmfp.core.io import load_jsonl, save_jsonl
+from llmfp.core.model_backend import ModelBackend
+from llmfp.registry import get_method
+
+
+def run_verify(
+    method_name: str,
+    method_cfg: dict[str, Any],
+    suspect_model_cfg: dict[str, Any],
+    fingerprints_path: str | Path,
+    out_path: str | Path,
+):
+    method = get_method(method_name)
+    backend = ModelBackend.from_config(suspect_model_cfg)
+    artifacts = load_jsonl(fingerprints_path)
+    results = [method.verify(artifact, backend, method_cfg) for artifact in artifacts]
+    save_jsonl(out_path, results)
+    return results
+
+
+
+================================================
+FILE: tests/test_imports.py
+================================================
+def test_imports():
+    import llmfp
+    from llmfp.registry import get_method
+    from llmfp.core.templates import get_template
+
+    assert llmfp.__version__
+    assert get_method("trap").name == "trap"
+    assert get_template("raw").name == "raw"
+
+
+
+================================================
+FILE: tests/test_io.py
+================================================
+from llmfp.core.io import load_jsonl, load_yaml, save_csv, save_jsonl
+
+
+def test_jsonl_roundtrip(tmp_path):
+    path = tmp_path / "rows.jsonl"
+    save_jsonl(path, [{"a": 1}, {"b": "two"}])
+    assert load_jsonl(path) == [{"a": 1}, {"b": "two"}]
+
+
+def test_yaml_load(tmp_path):
+    path = tmp_path / "config.yaml"
+    path.write_text("a: 1\nb: two\n", encoding="utf-8")
+    assert load_yaml(path) == {"a": 1, "b": "two"}
+
+
+def test_csv_write(tmp_path):
+    path = tmp_path / "table.csv"
+    save_csv(path, [{"a": 1}])
+    assert path.exists()
+    assert "a" in path.read_text(encoding="utf-8")
+
+
+
+================================================
+FILE: tests/test_matching.py
+================================================
+from llmfp.core.matching import (
+    contains_normalized_target,
+    match_keyword_target,
+    match_trap_output,
+    normalize_text,
+    parse_digit_sequence,
+)
+
+
+def test_normalize_text():
+    assert normalize_text("  North-East!! ") == "north east"
+
+
+def test_contains_normalized_target():
+    assert contains_normalized_target("The answer is NORTH.", "north")
+    assert not contains_normalized_target("northern", "north")
+
+
+def test_digit_parser():
+    assert parse_digit_sequence("answer: 042", 3) == "042"
+    assert parse_digit_sequence("12 3456", 3) is None
+
+
+def test_trap_match():
+    success, invalid, parsed = match_trap_output("042", "042")
+    assert success is True
+    assert invalid is False
+    assert parsed == "042"
+
+
+def test_keyword_match():
+    assert match_keyword_target("It should be green.", "blue", ["green"])
+
+
+
+================================================
+FILE: tests/test_prompt_templates.py
+================================================
+from llmfp.core.templates import get_template
+
+
+def test_raw_template_rendering():
+    assert get_template("raw").render("hello", " world") == "hello world"
+
+
+def test_alpaca_template_contains_user_and_assistant_prefix():
+    rendered = get_template("alpaca").render("Say hi", "Hi")
+    assert "Say hi" in rendered
+    assert "Hi" in rendered
+    assert "### Response:" in rendered
+
+
+def test_split_around_mutable():
+    before, after = get_template("fastchat_zero_shot").split_around_mutable("a ", " b")
+    assert "### Human:" in before
+    assert "a " in before
+    assert " b" in after
+    assert "### Assistant:" in after
+
+

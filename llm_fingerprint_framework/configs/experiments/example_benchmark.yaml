@@ -1,0 +1,12 @@
+model_config: configs/models/example_model.yaml
+suspect_model_config: configs/models/example_model.yaml
+methods:
+  - name: trap
+    config: configs/methods/trap.yaml
+  - name: proflingo
+    config: configs/methods/proflingo.yaml
+  - name: sraf
+    config: configs/methods/sraf.yaml
+  - name: llmprint
+    config: configs/methods/llmprint.yaml
+output_dir: results

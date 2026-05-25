@@ -1,0 +1,11 @@
+# Small debug defaults. The paper uses 50 question-target pairs and 256 epochs.
+num_questions: 2
+num_steps: 5
+prefix_len: 32
+top_k: 64
+search_width: 16
+batch_size: 16
+templates: [fastchat_zero_shot, alpaca]
+num_attempts: 1
+seed: 0
+max_new_tokens: 32

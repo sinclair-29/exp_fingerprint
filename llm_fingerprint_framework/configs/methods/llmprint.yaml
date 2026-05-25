@@ -1,0 +1,13 @@
+# Small debug defaults. Paper-like runs use about 300 token pairs and about 100 black-box samples.
+num_token_pairs: 5
+num_steps: 5
+suffix_len: 20
+top_k: 64
+search_width: 16
+batch_size: 16
+verification_mode: black_box
+black_box_samples: 5
+threshold: 0.7
+alpha: 0.1
+beta: 1.0
+seed: 0
