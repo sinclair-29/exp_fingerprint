@@ -1,0 +1,12 @@
+# Tiny smoke-test config. Verifies ProFLingo wiring only; not a scientific run.
+num_questions: 1
+num_steps: 1
+prefix_len: 4
+top_k: 16
+search_width: 4
+batch_size: 4
+templates: [llama2_chat]
+num_attempts: 1
+seed: 0
+max_new_tokens: 8
+log_every: 1

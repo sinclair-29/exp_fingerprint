@@ -1,0 +1,13 @@
+# Tiny smoke-test config. Verifies TRAP wiring only; not a scientific run.
+num_fingerprints: 1
+num_steps: 1
+answer_lengths: [3]
+suffix_len: 4
+top_k: 16
+search_width: 4
+batch_size: 4
+seed: 0
+max_new_tokens: 8
+allow_non_ascii: false
+filter_retokenization: true
+log_every: 1

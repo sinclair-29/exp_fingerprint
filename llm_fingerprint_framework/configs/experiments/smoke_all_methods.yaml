@@ -1,0 +1,12 @@
+model_config: configs/models/paper_llama2_7b_chat.yaml
+suspect_model_config: configs/models/paper_llama2_7b_chat.yaml
+methods:
+  - name: trap
+    config: configs/methods/smoke_trap.yaml
+  - name: proflingo
+    config: configs/methods/smoke_proflingo.yaml
+  - name: sraf
+    config: configs/methods/smoke_sraf.yaml
+  - name: llmprint
+    config: configs/methods/smoke_llmprint.yaml
+output_dir: results/smoke

@@ -1,0 +1,12 @@
+# Tiny smoke-test config. Verifies SRAF wiring only; not a scientific run.
+num_fingerprints: 1
+num_steps: 1
+mutable_len: 6
+top_k: 16
+search_width: 4
+batch_size: 4
+templates: [llama2_chat]
+compute_ppl: false
+seed: 0
+max_new_tokens: 8
+log_every: 1

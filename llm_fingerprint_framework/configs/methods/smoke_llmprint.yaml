@@ -1,0 +1,14 @@
+# Tiny smoke-test config. Verifies LLMPrint wiring only; not a scientific run.
+num_token_pairs: 5
+num_steps: 1
+suffix_len: 4
+top_k: 16
+search_width: 4
+batch_size: 4
+template: llama2_chat
+verification_mode: gray_box
+threshold: 0.7
+alpha: 0.1
+beta: 1.0
+seed: 0
+log_every: 1
