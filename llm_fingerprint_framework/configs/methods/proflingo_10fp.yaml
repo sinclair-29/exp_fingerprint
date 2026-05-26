@@ -1,7 +1,6 @@
-# Paper-scale ProFLingo setting.
-# Official ProFLingo uses 50 question-target pairs, 256 epochs, and 32 mutable prompt tokens.
+# 10-question ProFLingo run with paper-style optimization hyperparameters.
 questions_path: data/proflingo_questions_paper.jsonl
-num_questions: 50
+num_questions: 10
 num_steps: 256
 prefix_len: 32
 top_k: 128

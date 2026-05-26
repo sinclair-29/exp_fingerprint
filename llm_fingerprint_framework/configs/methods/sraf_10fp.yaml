@@ -1,0 +1,45 @@
+# 10-fingerprint SRAF Base(64)-style run representable in this single-model framework.
+num_fingerprints: 10
+num_steps: 1000
+mutable_len: 64
+top_k: 256
+search_width: 512
+batch_size: 512
+templates: [llama2_chat]
+compute_ppl: false
+seed: 0
+max_new_tokens: 48
+allow_non_ascii: false
+filter_retokenization: true
+log_every: 10
+targets:
+  - id: sraf-001
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "cerulean harbor"
+  - id: sraf-002
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "amber orbit"
+  - id: sraf-003
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "violet compass"
+  - id: sraf-004
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "silver meadow"
+  - id: sraf-005
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "crimson lantern"
+  - id: sraf-006
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "cobalt river"
+  - id: sraf-007
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "golden summit"
+  - id: sraf-008
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "jade horizon"
+  - id: sraf-009
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "scarlet valley"
+  - id: sraf-010
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "indigo forest"

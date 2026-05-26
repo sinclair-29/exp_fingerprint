@@ -36,10 +36,14 @@ ENV/
 logs/
 
 # Generated framework outputs
+llm_fingerprint_framework/results/*
 llm_fingerprint_framework/results/fingerprints/*
 llm_fingerprint_framework/results/runs/*
 llm_fingerprint_framework/results/tables/*
 llm_fingerprint_framework/results/smoke/*
+!llm_fingerprint_framework/results/fingerprints/
+!llm_fingerprint_framework/results/runs/
+!llm_fingerprint_framework/results/tables/
 !llm_fingerprint_framework/results/fingerprints/.gitkeep
 !llm_fingerprint_framework/results/runs/.gitkeep
 !llm_fingerprint_framework/results/tables/.gitkeep

@@ -1,0 +1,12 @@
+model_config: configs/models/paper_llama2_7b_chat.yaml
+suspect_model_config: configs/models/paper_llama2_7b_chat.yaml
+methods:
+  - name: trap
+    config: configs/methods/trap_10fp.yaml
+  - name: proflingo
+    config: configs/methods/proflingo_10fp.yaml
+  - name: sraf
+    config: configs/methods/sraf_10fp.yaml
+  - name: llmprint
+    config: configs/methods/llmprint_10fp.yaml
+output_dir: results/main_10fp

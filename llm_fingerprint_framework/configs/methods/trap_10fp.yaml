@@ -1,6 +1,5 @@
-# Paper-scale TRAP setting for the 4-digit experiment.
-# Official TRAP repeats this separately for string lengths 3, 4, and 5.
-num_fingerprints: 100
+# 10-fingerprint TRAP run with paper-style optimization hyperparameters.
+num_fingerprints: 10
 num_steps: 1500
 answer_lengths: [4]
 suffix_len: 20

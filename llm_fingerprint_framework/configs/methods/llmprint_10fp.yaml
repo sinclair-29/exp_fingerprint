@@ -1,7 +1,6 @@
-# Paper-scale LLMPrint setting.
-# Official LLMPrint uses 300 token pairs, 1000 GCG steps, and 100 black-box samples.
+# 10-token-pair LLMPrint run with paper-style optimization hyperparameters.
 token_pairs_path: data/llmprint_token_pairs_paper.jsonl
-num_token_pairs: 300
+num_token_pairs: 10
 num_steps: 1000
 suffix_len: 20
 top_k: 64

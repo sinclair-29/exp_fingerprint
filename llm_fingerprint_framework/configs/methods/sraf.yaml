@@ -1,11 +1,167 @@
-# Small debug defaults. Paper-like runs use larger multi-model/multi-template optimization.
-num_fingerprints: 2
-num_steps: 5
+# Paper-scale SRAF Base(64) setting representable in this single-model framework.
+# The paper's best SRAF variant jointly optimizes homologous models and templates;
+# this framework supports the one-source-model Base(64) analogue.
+num_fingerprints: 50
+num_steps: 1000
 mutable_len: 64
-top_k: 64
-search_width: 16
-batch_size: 16
-templates: [raw, zero_shot]
+top_k: 256
+search_width: 512
+batch_size: 512
+templates: [llama2_chat]
 compute_ppl: false
 seed: 0
 max_new_tokens: 48
+allow_non_ascii: false
+filter_retokenization: true
+log_every: 10
+targets:
+  - id: sraf-001
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "cerulean harbor"
+  - id: sraf-002
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "amber orbit"
+  - id: sraf-003
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "violet compass"
+  - id: sraf-004
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "silver meadow"
+  - id: sraf-005
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "crimson lantern"
+  - id: sraf-006
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "cobalt river"
+  - id: sraf-007
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "golden summit"
+  - id: sraf-008
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "jade horizon"
+  - id: sraf-009
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "scarlet valley"
+  - id: sraf-010
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "indigo forest"
+  - id: sraf-011
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "bronze island"
+  - id: sraf-012
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "ivory beacon"
+  - id: sraf-013
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "saffron bridge"
+  - id: sraf-014
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "opal garden"
+  - id: sraf-015
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "ruby station"
+  - id: sraf-016
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "teal monument"
+  - id: sraf-017
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "maroon orchard"
+  - id: sraf-018
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "azure canyon"
+  - id: sraf-019
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "pearl gateway"
+  - id: sraf-020
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "coral citadel"
+  - id: sraf-021
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "platinum grove"
+  - id: sraf-022
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "emerald tower"
+  - id: sraf-023
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "magenta field"
+  - id: sraf-024
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "ochre passage"
+  - id: sraf-025
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "obsidian trail"
+  - id: sraf-026
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "lime portal"
+  - id: sraf-027
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "navy chapel"
+  - id: sraf-028
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "rose terminal"
+  - id: sraf-029
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "tan reservoir"
+  - id: sraf-030
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "mint gallery"
+  - id: sraf-031
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "blue archive"
+  - id: sraf-032
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "green observatory"
+  - id: sraf-033
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "orange terrace"
+  - id: sraf-034
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "white depot"
+  - id: sraf-035
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "black pavilion"
+  - id: sraf-036
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "yellow crossing"
+  - id: sraf-037
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "purple courtyard"
+  - id: sraf-038
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "gray harbor"
+  - id: sraf-039
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "brown corridor"
+  - id: sraf-040
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "pink fortress"
+  - id: sraf-041
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "beige landmark"
+  - id: sraf-042
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "cyan lighthouse"
+  - id: sraf-043
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "violet station"
+  - id: sraf-044
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "silver garden"
+  - id: sraf-045
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "crimson bridge"
+  - id: sraf-046
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "cobalt beacon"
+  - id: sraf-047
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "golden valley"
+  - id: sraf-048
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "jade lantern"
+  - id: sraf-049
+    base_prompt: "Read the reference table and answer with the hidden key."
+    target: "scarlet river"
+  - id: sraf-050
+    base_prompt: "Use the table cells as reference material and output the hidden key."
+    target: "indigo summit"
