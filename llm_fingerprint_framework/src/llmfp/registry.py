@@ -8,6 +8,7 @@ METHODS = {
     "proflingo": "llmfp.methods.proflingo:ProFLingoMethod",
     "llmprint": "llmfp.methods.llmprint:LLMPrintMethod",
     "sraf": "llmfp.methods.sraf:SRAFMethod",
+    "plugae": "llmfp.methods.plugae:PlugAEMethod",
 }
 
 

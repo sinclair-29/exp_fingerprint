@@ -1,0 +1,49 @@
+run_id: smoke_unified
+output_dir: results
+source_models:
+  - config: configs/models/example_model.yaml
+seeds: [0]
+fingerprints_per_method: 2
+methods:
+  - name: trap
+    config: configs/methods/smoke_trap.yaml
+  - name: proflingo
+    config: configs/methods/smoke_proflingo.yaml
+  - name: sraf
+    config: configs/methods/smoke_sraf.yaml
+  - name: llmprint
+    config: configs/methods/smoke_llmprint.yaml
+  - name: plugae
+    config: configs/methods/smoke_plugae.yaml
+positive_suspects:
+  - config: configs/models/example_model.yaml
+    modification_type: none
+negative_suspects:
+  - config: configs/models/example_model.yaml
+    negative_type: unrelated
+deployment_conditions:
+  - name: default
+    sampling: {}
+  - name: greedy
+    sampling:
+      do_sample: false
+      temperature: 1.0
+    reported_sampling:
+      do_sample: false
+      temperature: 0.0
+  - name: temperature_0_7
+    sampling:
+      do_sample: true
+      temperature: 0.7
+  - name: top_p_0_9
+    sampling:
+      do_sample: true
+      top_p: 0.9
+  - name: system_prompt_variant
+    system_prompt: "You are a concise assistant."
+    sampling: {}
+plugae:
+  protected_derivatives:
+    sft: []
+    lora: []
+    quantization: []

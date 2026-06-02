@@ -1,0 +1,15 @@
+# Tiny PlugAE smoke setting. This protects a saved model artifact per query.
+enabled: true
+num_adv_tokens: 1
+copyright_tokens: ["<COPYRIGHT_TOKEN_0>"]
+insertion_position: prefix
+lr: 0.1
+epochs: 3
+templates: [default]
+query_set_path: data/plugae_queries.jsonl
+protected_model_output_dir: artifacts/plugae_protected/<source_model>
+separate_artifact_per_fingerprint: true
+num_fingerprints: 2
+seed: 0
+max_new_tokens: 32
+do_sample: false

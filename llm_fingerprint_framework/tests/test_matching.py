@@ -1,5 +1,6 @@
 from llmfp.core.matching import (
     contains_normalized_target,
+    exact_normalized_target,
     match_keyword_target,
     match_trap_output,
     normalize_text,
@@ -14,6 +15,11 @@ def test_normalize_text():
 def test_contains_normalized_target():
     assert contains_normalized_target("The answer is NORTH.", "north")
     assert not contains_normalized_target("northern", "north")
+
+
+def test_exact_normalized_target():
+    assert exact_normalized_target("North-East!!", "north east")
+    assert not exact_normalized_target("The answer is north east", "north east")
 
 
 def test_digit_parser():

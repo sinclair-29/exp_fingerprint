@@ -1,4 +1,5 @@
-# 10-fingerprint SRAF Base(64)+[D+Z] run with official-like structure.
+# SRAF Base+S2.7-P+[D+Z] example from the paper.
+# If the pruned model is absent, required:false skips it and falls back to Base(64)+[D+Z].
 num_fingerprints: 10
 num_steps: 1000
 mutable_len: 64
@@ -10,7 +11,10 @@ templates: [sraf_default, sraf_zero_shot]
 match_mode: exact_normalized
 compute_ppl: false
 ppl_model_name_or_path: gpt2
-co_model_configs: []
+co_model_configs:
+  - path: configs/models/paper_sheared_llama2_27b_pruned.yaml
+    weight: 1.0
+    required: false
 seed: 0
 max_new_tokens: 48
 allow_non_ascii: false

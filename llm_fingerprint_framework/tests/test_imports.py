@@ -5,4 +5,5 @@ def test_imports():
 
     assert llmfp.__version__
     assert get_method("trap").name == "trap"
+    assert get_method("plugae").name == "plugae"
     assert get_template("raw").name == "raw"

@@ -194,34 +194,60 @@ class LLMPrintSuffixPromptBuilder(SegmentedPromptBuilder):
 
 
 class SRAFTablePromptBuilder(SegmentedPromptBuilder):
-    SENTINELS = ["[[LLMFP_SRAF_0]]", "[[LLMFP_SRAF_1]]", "[[LLMFP_SRAF_2]]"]
+    SENTINEL_PREFIX = "[[LLMFP_SRAF_"
 
-    def __init__(self, tokenizer, base_prompt: str, target: str, templates: list[str]):
+    def __init__(
+        self,
+        tokenizer,
+        base_prompt: str,
+        target: str,
+        templates: list[str],
+        table_segments: int = 3,
+        table_headers: tuple[str, str] = ("Field", "Value"),
+        row_label_prefix: str = "Segment",
+    ):
+        if table_segments < 1:
+            raise ValueError("table_segments must be positive")
         self.base_prompt = base_prompt
         self.target = target
+        self.table_segments = int(table_segments)
+        self.sentinels = [f"{self.SENTINEL_PREFIX}{idx}]]" for idx in range(self.table_segments)]
         variants = []
-        user_prompt = self._user_prompt_with_sentinels(base_prompt)
+        user_prompt = self._user_prompt_with_sentinels(
+            base_prompt=base_prompt,
+            sentinels=self.sentinels,
+            table_headers=table_headers,
+            row_label_prefix=row_label_prefix,
+        )
         for template_name in templates:
             rendered = get_template(template_name).render(user_prompt, assistant_prefix="")
-            variants.append(PromptVariantSpec(template_name, self._split_rendered(rendered), target))
-        super().__init__(tokenizer=tokenizer, variants=variants, segment_count=3)
+            variants.append(PromptVariantSpec(template_name, self._split_rendered(rendered, self.sentinels), target))
+        super().__init__(tokenizer=tokenizer, variants=variants, segment_count=self.table_segments)
 
     @classmethod
-    def _user_prompt_with_sentinels(cls, base_prompt: str) -> str:
-        return (
-            f"{base_prompt}\n\n"
-            "| Field | Value |\n"
-            "|---|---|\n"
-            f"| Note | {cls.SENTINELS[0]} |\n"
-            f"| Key | {cls.SENTINELS[1]} |\n"
-            f"| Ref | {cls.SENTINELS[2]} |\n"
-        )
+    def _user_prompt_with_sentinels(
+        cls,
+        base_prompt: str,
+        sentinels: list[str],
+        table_headers: tuple[str, str] = ("Field", "Value"),
+        row_label_prefix: str = "Segment",
+    ) -> str:
+        left_header, right_header = table_headers
+        lines = [
+            base_prompt,
+            "",
+            f"| {left_header} | {right_header} |",
+            "|---|---|",
+        ]
+        for index, sentinel in enumerate(sentinels, start=1):
+            lines.append(f"| {row_label_prefix} {index} | {sentinel} |")
+        return "\n".join(lines) + "\n"
 
     @classmethod
-    def _split_rendered(cls, rendered: str) -> list[str]:
+    def _split_rendered(cls, rendered: str, sentinels: list[str]) -> list[str]:
         pieces = []
         cursor = 0
-        for sentinel in cls.SENTINELS:
+        for sentinel in sentinels:
             index = rendered.find(sentinel, cursor)
             if index < 0:
                 raise ValueError("SRAF template did not preserve all mutable sentinels")

@@ -1,14 +1,17 @@
-# Paper-scale SRAF Base(64) setting representable in this single-model framework.
-# The paper's best SRAF variant jointly optimizes homologous models and templates;
-# this framework supports the one-source-model Base(64) analogue.
+# Official-like SRAF Base(64)+[D+Z] default.
+# Add homologous/pruned Llama-2 family models via co_model_configs when available.
 num_fingerprints: 50
 num_steps: 1000
 mutable_len: 64
+table_segments: 3
 top_k: 256
 search_width: 512
 batch_size: 512
-templates: [llama2_chat]
+templates: [sraf_default, sraf_zero_shot]
+match_mode: exact_normalized
 compute_ppl: false
+ppl_model_name_or_path: gpt2
+co_model_configs: []
 seed: 0
 max_new_tokens: 48
 allow_non_ascii: false

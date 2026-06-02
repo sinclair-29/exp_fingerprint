@@ -19,6 +19,13 @@ def contains_normalized_target(output: str, target: str) -> bool:
     return f" {normalized_target} " in normalized_output
 
 
+def exact_normalized_target(output: str, target: str) -> bool:
+    normalized_target = normalize_text(target)
+    if not normalized_target:
+        return False
+    return normalize_text(output) == normalized_target
+
+
 def parse_digit_sequence(output: str, n_digits: int) -> str | None:
     for match in re.finditer(r"\d+", output or ""):
         token = match.group(0)

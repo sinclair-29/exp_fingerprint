@@ -121,9 +121,12 @@ class GCGOptimizer:
         ids = cur_ids.unsqueeze(0)
         onehot = F.one_hot(ids, num_classes=self.embedding_layer.num_embeddings).to(self.device, self.model.dtype)
         onehot = onehot.detach().clone().requires_grad_(True)
-        mutable_embeds = onehot @ self.embedding_layer.weight
-        built = prompt_builder.build_inputs(self.model_backend, mutable_embeds=mutable_embeds)
-        loss = loss_fn.compute(self.model_backend, built).mean()
+        if hasattr(loss_fn, "compute_with_onehot"):
+            loss = loss_fn.compute_with_onehot(self.model_backend, prompt_builder, onehot).mean()
+        else:
+            mutable_embeds = onehot @ self.embedding_layer.weight
+            built = prompt_builder.build_inputs(self.model_backend, mutable_embeds=mutable_embeds)
+            loss = loss_fn.compute(self.model_backend, built).mean()
         grad = torch.autograd.grad(outputs=[loss], inputs=[onehot])[0]
         return grad.squeeze(0)
 
@@ -135,8 +138,12 @@ class GCGOptimizer:
         for start in range(0, candidate_ids.shape[0], search_batch_size):
             batch_ids = candidate_ids[start: start + search_batch_size]
             with torch.no_grad():
-                built = prompt_builder.build_inputs(self.model_backend, mutable_ids=batch_ids)
-                losses.append(loss_fn.compute(self.model_backend, built).detach())
+                if hasattr(loss_fn, "compute_for_candidates"):
+                    loss = loss_fn.compute_for_candidates(self.model_backend, prompt_builder, batch_ids)
+                else:
+                    built = prompt_builder.build_inputs(self.model_backend, mutable_ids=batch_ids)
+                    loss = loss_fn.compute(self.model_backend, built)
+                losses.append(loss.detach())
         return torch.cat(losses, dim=0)
 
     def optimize(

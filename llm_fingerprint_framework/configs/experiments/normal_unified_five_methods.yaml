@@ -1,0 +1,58 @@
+run_id: normal_unified
+output_dir: results
+source_models:
+  - config: configs/models/paper_llama2_7b_chat.yaml
+seeds: [0, 1, 2]
+fingerprints_per_method: 30
+methods:
+  - name: trap
+    config: configs/methods/trap.yaml
+  - name: proflingo
+    config: configs/methods/proflingo.yaml
+  - name: sraf
+    config: configs/methods/sraf.yaml
+  - name: llmprint
+    config: configs/methods/llmprint.yaml
+  - name: plugae
+    config: configs/methods/plugae.yaml
+positive_suspects:
+  - config: configs/models/paper_llama2_7b_chat.yaml
+    modification_type: sft
+  - config: configs/models/paper_llama2_7b_chat.yaml
+    modification_type: lora
+  - config: configs/models/paper_llama2_7b_chat.yaml
+    modification_type: quantization
+negative_suspects:
+  - config: configs/models/server_mistral_7b_instruct_v03.yaml
+    negative_type: unrelated
+  - config: configs/models/paper_sheared_llama2_27b_pruned.yaml
+    negative_type: same_family_hard_negative
+deployment_conditions:
+  - name: default
+    sampling: {}
+  - name: greedy
+    sampling:
+      do_sample: false
+      temperature: 1.0
+    reported_sampling:
+      do_sample: false
+      temperature: 0.0
+  - name: temperature_0_7
+    sampling:
+      do_sample: true
+      temperature: 0.7
+  - name: top_p_0_9
+    sampling:
+      do_sample: true
+      top_p: 0.9
+  - name: system_prompt_concise
+    system_prompt: "You are a concise assistant."
+    sampling: {}
+plugae:
+  # Fill these with externally prepared derivatives of PlugAE-protected artifacts.
+  # Generic positive_suspects above will be marked invalid for PlugAE positives
+  # if their tokenizer does not contain the configured copyright tokens.
+  protected_derivatives:
+    sft: []
+    lora: []
+    quantization: []

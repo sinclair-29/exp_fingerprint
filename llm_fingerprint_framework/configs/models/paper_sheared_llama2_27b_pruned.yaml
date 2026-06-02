@@ -1,0 +1,6 @@
+name: sheared-llama2-2.7b-pruned
+model_name_or_path: /home/chj/LLMJailbreak/models/Sheared-Llama-2.7B-Pruned
+tokenizer_name_or_path: /home/chj/LLMJailbreak/models/Llama-2-7b-chat-hf
+device: cuda:0
+dtype: float16
+template: sraf_default

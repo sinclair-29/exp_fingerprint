@@ -45,6 +45,16 @@ class ChatTemplate:
             return f"[Round 1]\n\n问：{user_prompt}\n\n答：{assistant_prefix}"
         if self.name == "zero_shot":
             return f"{user_prompt}\n\nAnswer: {assistant_prefix}"
+        if self.name == "sraf_default":
+            return f"<|im_start|>user\n{user_prompt}<|im_end|>\n<|im_start|>assistant\n{assistant_prefix}"
+        if self.name == "sraf_alpaca":
+            return f"### Instruction:\n{user_prompt}\n\n### Response:\n{assistant_prefix}"
+        if self.name == "sraf_chatglm":
+            return f"[Round 1]\n问：{user_prompt}\n答：{assistant_prefix}"
+        if self.name == "sraf_llama2":
+            return f"<s>[INST] {user_prompt} [/INST] </s>{assistant_prefix}"
+        if self.name == "sraf_zero_shot":
+            return user_prompt + assistant_prefix
         raise ValueError(f"Unknown template: {self.name}")
 
     def split_around_mutable(self, user_before: str, user_after: str) -> tuple[str, str]:
@@ -68,6 +78,11 @@ def get_template(name: str) -> ChatTemplate:
         "vicuna_chat",
         "chatglm_like",
         "zero_shot",
+        "sraf_default",
+        "sraf_alpaca",
+        "sraf_chatglm",
+        "sraf_llama2",
+        "sraf_zero_shot",
     }
     if name not in supported:
         raise ValueError(f"Unsupported template {name!r}. Supported: {sorted(supported)}")

@@ -2,11 +2,17 @@
 num_fingerprints: 2
 num_steps: 50
 mutable_len: 32
+table_segments: 3
 top_k: 64
 search_width: 64
 batch_size: 64
-templates: [llama2_chat]
+templates: [sraf_default, sraf_zero_shot]
+match_mode: exact_normalized
 compute_ppl: false
+ppl_model_name_or_path: gpt2
+co_model_configs: []
 seed: 0
 max_new_tokens: 32
+allow_non_ascii: false
+filter_retokenization: true
 log_every: 10

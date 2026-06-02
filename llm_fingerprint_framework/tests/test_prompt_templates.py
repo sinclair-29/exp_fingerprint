@@ -25,3 +25,10 @@ def test_server_chat_templates_preserve_mutable_span():
         before, after = get_template(name).split_around_mutable("a ", " b")
         assert "a " in before
         assert " b" in after
+
+
+def test_sraf_chat_templates_preserve_mutable_span():
+    for name in ["sraf_default", "sraf_alpaca", "sraf_chatglm", "sraf_llama2", "sraf_zero_shot"]:
+        before, after = get_template(name).split_around_mutable("a ", " b")
+        assert "a " in before
+        assert " b" in after
