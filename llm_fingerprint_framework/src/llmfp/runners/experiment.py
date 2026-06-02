@@ -10,6 +10,7 @@ from llmfp.core.io import append_jsonl, load_yaml
 from llmfp.core.model_backend import ModelBackend
 from llmfp.core.raw_records import default_raw_record, validate_raw_record, verification_entry
 from llmfp.registry import get_method
+from llmfp.schemas import VerificationResult
 
 
 def _resolve_path(path: str | Path) -> Path:
@@ -209,6 +210,41 @@ def _load_backend_for_spec(spec: dict[str, Any], cache: dict[str, ModelBackend])
     return cache[key]
 
 
+def _unload_backend_cache(cache: dict[str, ModelBackend]) -> None:
+    seen: set[int] = set()
+    for backend in list(cache.values()):
+        if id(backend) in seen:
+            continue
+        seen.add(id(backend))
+        backend.unload()
+    cache.clear()
+
+
+def _tokenizer_contains_tokens_for_spec(spec: dict[str, Any], tokens: list[str]) -> bool:
+    if "backend" in spec:
+        backend = spec["backend"]
+        backend.load()
+        tokenizer = backend.tokenizer
+    else:
+        from transformers import AutoTokenizer
+
+        model_cfg = _load_model_cfg(spec)
+        tokenizer_ref = model_cfg.get("tokenizer_name_or_path") or model_cfg.get("model_name_or_path")
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_ref,
+            trust_remote_code=bool(model_cfg.get("trust_remote_code", False)),
+        )
+    unk_id = getattr(tokenizer, "unk_token_id", None)
+    added = getattr(tokenizer, "added_tokens_encoder", {}) or {}
+    for token in tokens:
+        token_id = tokenizer.convert_tokens_to_ids(token)
+        if token_id is None:
+            return False
+        if unk_id is not None and int(token_id) == int(unk_id) and token not in added:
+            return False
+    return True
+
+
 def _condition_config(method_cfg: dict[str, Any], condition: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     sampling = dict(condition.get("sampling") or {})
     reported = dict(condition.get("reported_sampling") or sampling)
@@ -227,6 +263,29 @@ def _valid_for_method(method_name: str, model_role: str, configured_valid: bool,
     return bool(metadata.get("suspect_contains_copyright_tokens"))
 
 
+def _plugae_missing_token_result(artifact, backend_name: str, spec: dict[str, Any], model_role: str, valid_for_method: bool) -> VerificationResult:
+    metadata = artifact.metadata if hasattr(artifact, "metadata") else artifact.get("metadata", {})
+    copyright_tokens = list(metadata.get("copyright_tokens") or [])
+    return VerificationResult(
+        method="plugae",
+        base_model=artifact.base_model if hasattr(artifact, "base_model") else artifact.get("base_model"),
+        suspect_model=backend_name,
+        fingerprint_id=artifact.fingerprint_id if hasattr(artifact, "fingerprint_id") else artifact.get("fingerprint_id"),
+        success=False,
+        score=0.0,
+        raw_output=None,
+        metadata={
+            "copyright_tokens": copyright_tokens,
+            "suspect_contains_copyright_tokens": False,
+            "skipped_model_load": True,
+            "skip_reason": "suspect_tokenizer_missing_copyright_tokens",
+            "valid_for_method": valid_for_method,
+            "model_role": model_role,
+            "model_config": spec.get("config"),
+        },
+    )
+
+
 def run_experiment(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     run_id = _safe_run_id(cfg)
     output_dir = _resolve_path(cfg.get("output_dir", "results"))
@@ -236,68 +295,109 @@ def run_experiment(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     if fingerprints_per_method is not None:
         fingerprints_per_method = int(fingerprints_per_method)
     conditions = list(cfg.get("deployment_conditions") or _default_conditions())
-    backend_cache: dict[str, ModelBackend] = {}
     records: list[dict[str, Any]] = []
 
     for source_item in _model_spec_items(cfg.get("source_models") or [cfg.get("model_config")]):
         source_model_cfg = _load_model_cfg(source_item)
+        source_cache_key = _backend_cache_key(source_model_cfg)
         for method_item in _method_items(cfg):
             method_name = method_item["name"]
             method = get_method(method_name)
             for seed in seeds:
-                method_cfg = _load_method_config(method_item, seed, fingerprints_per_method)
+                backend_cache: dict[str, ModelBackend] = {}
                 source_backend: ModelBackend | None = None
+                method_cfg = _load_method_config(method_item, seed, fingerprints_per_method)
                 tasks = method.build_tasks(method_cfg)
-                for fp_index, task in enumerate(tasks):
-                    if source_backend is None or method_name == "plugae":
-                        source_backend = ModelBackend.from_config(source_model_cfg)
-                    _reset_gpu_peak()
-                    started = time.perf_counter()
-                    artifact = method.construct(task, source_backend, method_cfg)
-                    generation_time = time.perf_counter() - started
-                    if artifact is None:
-                        continue
-                    record = default_raw_record(run_id, method_name, source_backend.name, seed, fp_index, artifact)
-                    record["efficiency"]["generation_time_sec"] = generation_time
-                    record["efficiency"]["peak_gpu_memory_gb"] = _gpu_peak_gb()
-                    verification_specs = _verification_specs(cfg, method_name, source_backend)
-                    model_condition_counts: dict[str, int] = {}
-                    for spec in verification_specs:
-                        backend = _load_backend_for_spec(spec, backend_cache)
-                        model_role = str(spec.get("model_role", "suspect"))
-                        modification_type = str(spec.get("modification_type", "none"))
-                        negative_type = str(spec.get("negative_type", "none"))
-                        configured_valid = bool(spec.get("valid_for_method", True))
-                        for condition in conditions:
-                            condition_name = str(condition.get("name", "default"))
-                            system_prompt = condition.get("system_prompt")
-                            verify_cfg, reported_sampling = _condition_config(method_cfg, condition)
-                            deployment_backend = DeploymentBackend(backend, system_prompt=system_prompt)
-                            result = method.verify(artifact, deployment_backend, verify_cfg)
-                            valid = _valid_for_method(method_name, model_role, configured_valid, result)
-                            record["verification"].append(
-                                verification_entry(
-                                    result,
-                                    model=backend.name,
-                                    model_role=model_role,
-                                    modification_type=modification_type,
-                                    negative_type=negative_type,
-                                    condition=condition_name,
-                                    system_prompt=system_prompt,
-                                    sampling=reported_sampling,
-                                    valid_for_method=valid,
+                try:
+                    for fp_index, task in enumerate(tasks):
+                        if method_name == "plugae":
+                            if source_backend is not None:
+                                source_backend.unload()
+                            source_backend = ModelBackend.from_config(source_model_cfg)
+                        elif source_backend is None:
+                            source_backend = ModelBackend.from_config(source_model_cfg)
+                            backend_cache[source_cache_key] = source_backend
+                        _reset_gpu_peak()
+                        started = time.perf_counter()
+                        artifact = method.construct(task, source_backend, method_cfg)
+                        generation_time = time.perf_counter() - started
+                        if artifact is None:
+                            continue
+                        record = default_raw_record(run_id, method_name, source_backend.name, seed, fp_index, artifact)
+                        record["efficiency"]["generation_time_sec"] = generation_time
+                        record["efficiency"]["peak_gpu_memory_gb"] = _gpu_peak_gb()
+                        verification_specs = _verification_specs(cfg, method_name, source_backend)
+                        model_condition_counts: dict[str, int] = {}
+                        for spec in verification_specs:
+                            model_role = str(spec.get("model_role", "suspect"))
+                            modification_type = str(spec.get("modification_type", "none"))
+                            negative_type = str(spec.get("negative_type", "none"))
+                            configured_valid = bool(spec.get("valid_for_method", True))
+                            contains_plugae_tokens = True
+                            if method_name == "plugae" and model_role != "source":
+                                artifact_metadata = artifact.metadata if hasattr(artifact, "metadata") else artifact.get("metadata", {})
+                                tokens = list(artifact_metadata.get("copyright_tokens") or [])
+                                contains_plugae_tokens = _tokenizer_contains_tokens_for_spec(spec, tokens)
+                            if method_name == "plugae" and model_role != "source" and not contains_plugae_tokens:
+                                if spec.get("config"):
+                                    backend_name = str(_load_model_cfg(spec).get("name") or spec.get("config"))
+                                else:
+                                    backend_name = str((spec.get("model") or spec).get("name") or (spec.get("model") or spec).get("model_name_or_path"))
+                                for condition in conditions:
+                                    condition_name = str(condition.get("name", "default"))
+                                    _, reported_sampling = _condition_config(method_cfg, condition)
+                                    valid = configured_valid and model_role != "positive"
+                                    result = _plugae_missing_token_result(artifact, backend_name, spec, model_role, valid)
+                                    record["verification"].append(
+                                        verification_entry(
+                                            result,
+                                            model=backend_name,
+                                            model_role=model_role,
+                                            modification_type=modification_type,
+                                            negative_type=negative_type,
+                                            condition=condition_name,
+                                            system_prompt=condition.get("system_prompt"),
+                                            sampling=reported_sampling,
+                                            valid_for_method=valid,
+                                        )
+                                    )
+                                    model_condition_counts[backend_name] = model_condition_counts.get(backend_name, 0) + 1
+                                continue
+                            backend = _load_backend_for_spec(spec, backend_cache)
+                            for condition in conditions:
+                                condition_name = str(condition.get("name", "default"))
+                                system_prompt = condition.get("system_prompt")
+                                verify_cfg, reported_sampling = _condition_config(method_cfg, condition)
+                                deployment_backend = DeploymentBackend(backend, system_prompt=system_prompt)
+                                result = method.verify(artifact, deployment_backend, verify_cfg)
+                                valid = _valid_for_method(method_name, model_role, configured_valid, result)
+                                record["verification"].append(
+                                    verification_entry(
+                                        result,
+                                        model=backend.name,
+                                        model_role=model_role,
+                                        modification_type=modification_type,
+                                        negative_type=negative_type,
+                                        condition=condition_name,
+                                        system_prompt=system_prompt,
+                                        sampling=reported_sampling,
+                                        valid_for_method=valid,
+                                    )
                                 )
-                            )
-                            model_condition_counts[backend.name] = model_condition_counts.get(backend.name, 0) + 1
-                    source_default = [
-                        row
-                        for row in record["verification"]
-                        if row["model_role"] == "source" and row["condition"] == "default" and row["valid_for_method"]
-                    ]
-                    record["generation"]["success_on_source"] = bool(source_default and float(source_default[0].get("score") or 0.0) > 0.0)
-                    record["efficiency"]["verification_queries_per_model"] = max(model_condition_counts.values()) if model_condition_counts else 0
-                    validate_raw_record(record)
-                    raw_path = raw_root / method_name / f"{run_id}.jsonl"
-                    append_jsonl(raw_path, record)
-                    records.append(record)
+                                model_condition_counts[backend.name] = model_condition_counts.get(backend.name, 0) + 1
+                        source_default = [
+                            row
+                            for row in record["verification"]
+                            if row["model_role"] == "source" and row["condition"] == "default" and row["valid_for_method"]
+                        ]
+                        record["generation"]["success_on_source"] = bool(source_default and float(source_default[0].get("score") or 0.0) > 0.0)
+                        record["efficiency"]["verification_queries_per_model"] = max(model_condition_counts.values()) if model_condition_counts else 0
+                        validate_raw_record(record)
+                        raw_path = raw_root / method_name / f"{run_id}.jsonl"
+                        append_jsonl(raw_path, record)
+                        records.append(record)
+                finally:
+                    _unload_backend_cache(backend_cache)
+                    if source_backend is not None:
+                        source_backend.unload()
     return records

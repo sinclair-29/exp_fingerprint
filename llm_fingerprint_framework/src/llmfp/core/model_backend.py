@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import gc
 from dataclasses import dataclass
 from typing import Any
 
@@ -82,6 +84,13 @@ class ModelBackend:
         self.model.requires_grad_(False)
         return self
 
+    def unload(self) -> None:
+        self.model = None
+        self.tokenizer = None
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def tokenize(self, text: str, add_special_tokens: bool = False) -> list[int]:
         self.load()
         return self.tokenizer(text, add_special_tokens=add_special_tokens)["input_ids"]
@@ -131,6 +140,9 @@ class ModelBackend:
     ) -> str:
         self.load()
         encoded = self.tokenizer(prompt_text, return_tensors="pt", add_special_tokens=False).to(self.device)
+        generation_config = copy.deepcopy(getattr(self.model, "generation_config", None))
+        if generation_config is not None and getattr(generation_config, "max_length", None) is not None:
+            generation_config.max_length = None
         output_ids = self.model.generate(
             **encoded,
             max_new_tokens=max_new_tokens,
@@ -138,6 +150,7 @@ class ModelBackend:
             temperature=temperature,
             top_p=top_p,
             pad_token_id=self.tokenizer.pad_token_id,
+            generation_config=generation_config,
         )[0]
         new_ids = output_ids[encoded["input_ids"].shape[1]:]
         return self.tokenizer.decode(new_ids, skip_special_tokens=True).strip()
