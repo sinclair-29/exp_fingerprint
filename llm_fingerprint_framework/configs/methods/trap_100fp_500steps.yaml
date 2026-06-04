@@ -1,0 +1,13 @@
+# 100-fingerprint TRAP run with faster 500-step optimization.
+num_fingerprints: 100
+num_steps: 500
+answer_lengths: [4]
+suffix_len: 20
+top_k: 256
+search_width: 512
+batch_size: 512
+seed: 41
+max_new_tokens: 64
+allow_non_ascii: false
+filter_retokenization: true
+log_every: 10
