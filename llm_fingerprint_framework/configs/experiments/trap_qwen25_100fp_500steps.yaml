@@ -1,0 +1,6 @@
+model_config: configs/models/server_qwen25_7b_instruct.yaml
+suspect_model_config: configs/models/server_qwen25_7b_instruct.yaml
+methods:
+  - name: trap
+    config: configs/methods/trap_100fp_500steps.yaml
+output_dir: results/trap_qwen25_100fp_500steps
