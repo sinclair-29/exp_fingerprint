@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,47 @@ def _with_unique_fingerprint_id(artifact, seed: int, original_index: int, used_i
     )
 
 
+def _format_duration(seconds: float | None) -> str:
+    if seconds is None:
+        return "unknown"
+    seconds = max(0, int(seconds))
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m{secs:02d}s"
+    if minutes:
+        return f"{minutes}m{secs:02d}s"
+    return f"{secs}s"
+
+
+def _progress_line(
+    *,
+    tried: int,
+    new_successes: int,
+    current_successes: int,
+    target_successes: int,
+    elapsed: float,
+    fallback_success_rate: float,
+) -> str:
+    successes_needed = max(0, target_successes - current_successes)
+    avg_seconds = elapsed / tried if tried else None
+    observed_rate = new_successes / tried if tried and new_successes else fallback_success_rate
+    eta = None
+    estimated_candidates = None
+    if avg_seconds is not None and observed_rate > 0:
+        estimated_candidates = successes_needed / observed_rate
+        eta = estimated_candidates * avg_seconds
+    rate_text = f"{observed_rate:.3f}" if observed_rate else "unknown"
+    candidates_text = f"{estimated_candidates:.1f}" if estimated_candidates is not None else "unknown"
+    return (
+        f"progress tried={tried} new_successes={new_successes} "
+        f"total_successes={current_successes}/{target_successes} "
+        f"success_rate_est={rate_text} avg_candidate_time={_format_duration(avg_seconds)} "
+        f"estimated_candidates_left={candidates_text} eta={_format_duration(eta)} "
+        f"elapsed={_format_duration(elapsed)}"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Fill a TRAP fingerprint pool until it contains N successful fingerprints.")
     parser.add_argument("--method-config", required=True)
@@ -60,6 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed-start", type=int, default=42)
     parser.add_argument("--candidates-per-seed", type=int, default=100)
     parser.add_argument("--max-new-candidates", type=int, default=100)
+    parser.add_argument("--progress-every", type=int, default=1)
     return parser
 
 
@@ -71,6 +114,10 @@ def main() -> int:
     final_verification_path = out_dir / "runs" / "trap_verify.jsonl"
     rejected_fingerprints_path = out_dir / "fingerprints" / "trap_rejected.jsonl"
     rejected_verification_path = out_dir / "runs" / "trap_verify_rejected.jsonl"
+
+    existing_verification = load_jsonl(Path(args.existing_verification))
+    existing_successes = sum(_result_success(row) for row in existing_verification)
+    fallback_success_rate = existing_successes / len(existing_verification) if existing_verification else 0.5
 
     if final_fingerprints_path.exists() and final_verification_path.exists():
         final_fingerprints = load_jsonl(final_fingerprints_path)
@@ -87,6 +134,7 @@ def main() -> int:
 
     current_successes = sum(_result_success(row) for row in final_results)
     print(f"starting_successes={current_successes}")
+    print(f"fallback_success_rate_from_existing_run={fallback_success_rate:.3f}")
     if current_successes >= args.target_successes:
         print(f"done final_fingerprints={final_fingerprints_path}")
         print(f"done final_verification={final_verification_path}")
@@ -98,13 +146,18 @@ def main() -> int:
 
     from llmfp.core.model_backend import ModelBackend
 
+    print("loading_model=true")
+    load_start = time.monotonic()
     backend = ModelBackend.from_config(model_cfg)
+    print(f"loading_model=false load_time={_format_duration(time.monotonic() - load_start)}")
     rejected_fingerprints = load_jsonl(rejected_fingerprints_path)
     used_ids = _existing_ids(final_fingerprints) | _existing_ids(rejected_fingerprints)
     used_targets = _existing_targets(final_fingerprints) | _existing_targets(rejected_fingerprints)
 
     tried = 0
+    new_successes = 0
     seed = args.seed_start
+    run_start = time.monotonic()
     while current_successes < args.target_successes and tried < args.max_new_candidates:
         candidate_cfg = dict(method_cfg)
         candidate_cfg["seed"] = seed
@@ -118,6 +171,11 @@ def main() -> int:
                 continue
             tried += 1
 
+            candidate_start = time.monotonic()
+            print(
+                f"candidate_start seed={seed} index={index} tried={tried}/{args.max_new_candidates} "
+                f"successes={current_successes}/{args.target_successes}"
+            )
             artifact = method.construct(task, backend, candidate_cfg)
             if artifact is None:
                 continue
@@ -130,16 +188,34 @@ def main() -> int:
                 append_jsonl(final_verification_path, result)
                 used_targets.add(artifact.target)
                 current_successes += 1
+                new_successes += 1
                 print(f"accepted {artifact.fingerprint_id} successes={current_successes}/{args.target_successes}")
             else:
                 append_jsonl(rejected_fingerprints_path, artifact)
                 append_jsonl(rejected_verification_path, result)
                 print(f"rejected {artifact.fingerprint_id} successes={current_successes}/{args.target_successes}")
 
+            candidate_elapsed = time.monotonic() - candidate_start
+            elapsed = time.monotonic() - run_start
+            print(f"candidate_time={_format_duration(candidate_elapsed)}")
+            if args.progress_every > 0 and tried % args.progress_every == 0:
+                print(
+                    _progress_line(
+                        tried=tried,
+                        new_successes=new_successes,
+                        current_successes=current_successes,
+                        target_successes=args.target_successes,
+                        elapsed=elapsed,
+                        fallback_success_rate=fallback_success_rate,
+                    )
+                )
+
         seed += 1
 
     print(f"final_successes={current_successes}")
     print(f"new_candidates_tried={tried}")
+    print(f"new_successes={new_successes}")
+    print(f"elapsed={_format_duration(time.monotonic() - run_start)}")
     print(f"final_fingerprints={final_fingerprints_path}")
     print(f"final_verification={final_verification_path}")
     if current_successes < args.target_successes:
